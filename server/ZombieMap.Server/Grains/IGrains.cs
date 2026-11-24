@@ -1,3 +1,4 @@
+using ZombieMap.Core.Geo;
 using ZombieMap.Core.Buildings;
 using ZombieMap.Core.Encounters;
 using ZombieMap.Core.Health;
@@ -34,6 +35,9 @@ public interface IPlayerGrain : IGrainWithStringKey
     Task<HealthMessage> Wear(string stackId);
     Task<HealthMessage> TakeOff(string stackId);
     Task<HealthMessage> NewSurvivor();
+
+    /// <summary>The player is here: zombies around them, and a fight if they walked into some.</summary>
+    Task<NearbyMessage> Move(LatLng position, bool allowFights);
 
     // Food, sleep and the safehouse. The gateway checks you're at the safehouse before Sleep/Store/Retrieve.
     Task<HealthMessage> EatOrDrink(string stackId);

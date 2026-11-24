@@ -59,7 +59,18 @@ namespace ZombieMap.Client.Dev
                 },
                 session: _loot);
             if (_mapView != null)
+            {
                 _mapView.IsOverHud = p => p.y / _scale < ToolbarHeight || _map.InfoRect.Contains(p / _scale);
+                // Zombies walk the map; walking into them jumps to the fight.
+                var zombies = _mapView.gameObject.AddComponent<ZombieMap.Client.Map.ZombieLayer>();
+                zombies.Init(_mapView, _client);
+                zombies.FightStarted += started =>
+                {
+                    _encounter.Adopt(started);
+                    _tab = EncounterTab;
+                };
+                _map.Zombies = zombies;
+            }
             else
                 _tab = EncounterTab;
 

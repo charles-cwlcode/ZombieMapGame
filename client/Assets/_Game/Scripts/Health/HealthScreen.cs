@@ -101,7 +101,7 @@ namespace ZombieMap.Client.Health
             light.cullingMask = 1 << Layer;
 
             // Keep the map camera from ever drawing the health body.
-            foreach (var cam in FindObjectsByType<Camera>(FindObjectsSortMode.None))
+            foreach (var cam in FindObjectsByType<Camera>())
                 if (cam != screen._camera) cam.cullingMask &= ~(1 << Layer);
 
             screen.Frame();

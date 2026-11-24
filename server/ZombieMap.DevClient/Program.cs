@@ -12,6 +12,7 @@ using ZombieMap.Core.Geo;
 using ZombieMap.Core.Health;
 using ZombieMap.Core.Items;
 using ZombieMap.Core.Protocol;
+using ZombieMap.Core.Zombies;
 
 //   dotnet run --project server/ZombieMap.DevClient -- [url] --resume <playerId>
 // reconnects as a player from an earlier run (e.g. after restarting the server) and checks their
@@ -195,6 +196,10 @@ if (on.Safehouse != null)
     Check(on.Safehouse.Stash.Items.Any(s => s.ItemId == "drink.water_bottle"),
         $"survivor #{on.SurvivorNumber} still has the water stashed at the safehouse");
 
+// 10. Zombies on the map: see them, walk into one, fight, and the dead stay dead.
+if (welcome.DevStart is LatLng zombieStart)
+    await ZombieChecks(zombieStart);
+
 await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
 Console.WriteLine(failures == 0 ? "\nSMOKE TEST PASSED" : $"\nSMOKE TEST FAILED ({failures})");
 return failures == 0 ? 0 : 1;
@@ -277,17 +282,22 @@ async Task LootChecks(string buildingId, FloorPlan plan, LatLng here)
 
     // Start every search, then finish them once the longest is done.
     double longest = 0;
+    var startClock = System.Diagnostics.Stopwatch.StartNew();
     foreach (var c in containers)
     {
         var started = (await Request(MessageTypes.LootSearch, new LootSearchRequest { BuildingId = buildingId, ContainerId = c.Id, PlayerPosition = here }))
             .DataAs<LootMessage>();
         if (c == containers[0])
+        {
             Check(started.Status == SearchStatus.Searching && started.SecondsLeft >= 2, $"searching takes time ({started.SecondsLeft} s for a {c.Kind})");
+            // Asking again straight away (before starting the others, which takes a while) is still searching.
+            var tooSoon = (await Request(MessageTypes.LootSearch, new LootSearchRequest { BuildingId = buildingId, ContainerId = c.Id, PlayerPosition = here }))
+                .DataAs<LootMessage>();
+            Check(tooSoon.Status == SearchStatus.Searching, "asking again straight away is still searching");
+        }
         longest = Math.Max(longest, started.SecondsLeft);
     }
-    var tooSoon = (await Request(MessageTypes.LootSearch, new LootSearchRequest { BuildingId = buildingId, ContainerId = containers[0].Id, PlayerPosition = here }))
-        .DataAs<LootMessage>();
-    Check(tooSoon.Status == SearchStatus.Searching, "asking again straight away is still searching");
+    Console.WriteLine($"  Started {containers.Count} searches in {startClock.ElapsedMilliseconds} ms");
 
     await Task.Delay(TimeSpan.FromSeconds(longest + 0.2));
     LootMessage? withItems = null;
@@ -358,4 +368,90 @@ async Task SafehouseChecks(BuildingInfo building, LatLng here)
     // Leave the water in the stash: it should outlive this survivor.
     var water = back.Inventory.Main.Items.First(s => s.ItemId == "drink.water_bottle");
     await Request(MessageTypes.SafehouseStore, new SafehouseItemRequest { StackId = water.Id, PlayerPosition = here });
+}
+
+async Task ZombieChecks(LatLng here)
+{
+    var look = (await Request(MessageTypes.PlayerMove, new PlayerMoveRequest { PlayerPosition = here, AllowFights = false })).DataAs<NearbyMessage>();
+    var groups = look.Zombies.Where(z => !z.Horde).ToList();
+    var hordes = look.Zombies.Where(z => z.Horde).ToList();
+    Console.WriteLine($"\nZombies: cell {look.Cell}, {look.Cells.Sum(c => c.Zombies)} in {look.Cells.Count} cells; " +
+                      $"{groups.Count} groups nearby ({string.Join(", ", groups.GroupBy(g => g.Kind).Select(k => $"{k.Count()} {k.Key}"))}), " +
+                      $"sizes {string.Join(",", groups.Select(g => g.Count).OrderByDescending(c => c).Take(12))}; " +
+                      $"{hordes.Count} hordes ({string.Join(", ", hordes.Select(h => $"{h.Count} at {GeoMath.Distance(here, h.Position):0} m"))})");
+    Check(look.Cells.Count == 19 && look.Cells.All(c => c.Outline.Count >= 5), "player.move returns my cell and two rings, with outlines");
+    Check(look.Encounter == null, "no fight when fights are off");
+    Check(look.Zombies.All(z => z.Count > 0 && z.Motion?.Patrol.Loop.Count > 0), "every group has a size and a route");
+    if (groups.Count == 0)
+    {
+        Console.WriteLine("  (no zombie groups near the start point; skipping the chase and fight checks)");
+        return;
+    }
+
+    // Each group moves the way the server says: the client's own sums agree with the server's position.
+    var g0 = groups[0];
+    var mine = g0.Motion.PositionAt(look.TimeMs);
+    Check(GeoMath.Distance(mine, g0.Position) < 0.5, "client and server agree where a group is");
+
+    // Stand near shambling groups (18 m off, on each side in turn) until one has us in sight and comes for us.
+    var target = groups[0];
+    NearbyMessage seen = look;
+    bool chased = false;
+    foreach (var candidate in groups.Where(g => g.Kind == ZombieKind.Shambler).OrderBy(g => GeoMath.Distance(here, g.Position)).Take(4))
+    {
+        foreach (var (east, north) in new[] { (18.0, 0.0), (0.0, 18.0), (-18.0, 0.0), (0.0, -18.0) })
+        {
+            target = candidate;
+            seen = (await Request(MessageTypes.PlayerMove, new PlayerMoveRequest { PlayerPosition = GeoMath.Offset(candidate.Position, east, north) })).DataAs<NearbyMessage>();
+            chased = seen.Encounter != null || seen.Zombies.Any(z => z.Id == candidate.Id && z.Chasing);
+            if (chased) break;
+        }
+        if (chased) break;
+    }
+    Check(chased, "a group that sees us comes for us");
+    var after = seen.Zombies.FirstOrDefault(z => z.Id == target.Id);
+    if (after?.Chasing == true)
+    {
+        var leg = after.Motion.Legs[0];
+        Console.WriteLine($"  {after.Count} {after.Kind}(s) coming for us at {leg.Speed} m/s, {ZombieMotion.PathLength(leg.Path):0} m away");
+    }
+    if (seen.Encounter != null) await PlayFight(seen.Encounter);
+
+    // Walk right into it.
+    await Task.Delay(TimeSpan.FromSeconds(seen.Encounter != null ? 46 : 0)); // cooldown after a fight
+    var now = (await Request(MessageTypes.PlayerMove, new PlayerMoveRequest { PlayerPosition = here, AllowFights = false })).DataAs<NearbyMessage>();
+    var group = now.Zombies.FirstOrDefault(z => z.Id == target.Id) ?? now.Zombies.Where(z => !z.Horde).OrderBy(z => GeoMath.Distance(here, z.Position)).First();
+    var walk = (await Request(MessageTypes.PlayerMove, new PlayerMoveRequest { PlayerPosition = group.Position })).DataAs<NearbyMessage>();
+    Check(walk.Encounter != null, $"walking into a group of {group.Count} starts a fight");
+    if (walk.Encounter == null) return;
+    var start = walk.Encounter.Result.View;
+    Console.WriteLine($"  Fight: {start.ZombiesRemaining} zombies ({string.Join(", ", start.Zombies.GroupBy(z => z.Kind).Select(k => $"{k.Count()} {k.Key}"))}), arena {start.Arena}");
+    Check(start.ZombiesRemaining >= Math.Min(group.Count, 12), "the whole group joins the fight");
+
+    var fight = await PlayFight(walk.Encounter);
+    int killed = start.ZombiesRemaining - fight.ZombiesRemaining;
+    Console.WriteLine($"  Fight over: {fight.Status}, killed {killed}");
+
+    var later = (await Request(MessageTypes.PlayerMove, new PlayerMoveRequest { PlayerPosition = group.Position })).DataAs<NearbyMessage>();
+    Check(later.Encounter == null, "no new fight straight away (time to get away)");
+    if (killed > 0)
+    {
+        var left = later.Zombies.FirstOrDefault(z => z.Id == group.Id);
+        Check(left == null || left.Count < group.Count, $"the group lost its dead ({group.Count} → {left?.Count ?? 0})");
+    }
+}
+
+async Task<EncounterView> PlayFight(EncounterStateMessage started)
+{
+    var v = started.Result.View;
+    for (int step = 0; step < 120 && v.Status == EncounterStatus.Ongoing; step++)
+    {
+        var env = await Request(MessageTypes.EncounterAct, new EncounterActRequest { EncounterId = started.EncounterId, Action = ChooseAction(v) });
+        var result = env.Type == MessageTypes.EncounterState ? env.DataAs<EncounterStateMessage>().Result : null;
+        if (result == null || !result.Accepted)
+            result = (await Request(MessageTypes.EncounterAct, new EncounterActRequest { EncounterId = started.EncounterId, Action = EncounterAction.Of(EncounterActionKind.Wait) }))
+                .DataAs<EncounterStateMessage>().Result;
+        v = result.View;
+    }
+    return v;
 }

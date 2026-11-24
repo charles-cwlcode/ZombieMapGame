@@ -46,6 +46,9 @@ Then open `client/` in Unity, open `Assets/_Game/Scenes/Dev.unity` (or run
   The first time, you start at the server's dev start point (centre of its map area); after that,
   where you left off. Click a building: the server says which real building it is, its type and
   whether you're within loot range (80 m). **Search building** opens its generated floor plan.
+  Zombie groups shamble around (labelled with their size; orange = fast runners, purple = slow
+  crawlers, big dark = a horde), with hexagons showing how many are in each block. Groups that see
+  you come for you; get within 12 m and a fight starts. Untick **Attacks** to walk around without being noticed.
 - **Encounter**: the 8-lane tick prototype. A/D or arrow keys (or swipe) to turn. Hover an action
   to preview where zombies will be when it finishes. The shot clock sends Wait if you hesitate.
 - **Building**: a building's generated floor plan. Click a room, press **Search** on a container (2–5 real
@@ -102,6 +105,12 @@ Unity ↔ server round trip (no graphics needed):
 - ✅ Hunger, thirst and fatigue in real time; eating and drinking; a safehouse with a stash; sleeping there
 - ✅ Death is a survivor line: the next survivor keeps the safehouse stash
 - ✅ Everything is saved in PostgreSQL (`grain_state` table), so a server restart keeps players
+
+## Phase 2 status
+- ✅ Zombies on the map in groups (runners, shamblers, crawlers) and roaming hordes: they walk
+  around buildings, notice and chase you, drift toward noise; walking into them starts a fight with
+  their real kinds; kills stick
+- ⬜ The zombie virus, zombies finding your safehouse, spoilage, crafting, real weather
 
 ## Mapbox SDK v3.1 needs a patch for Unity 6000.5
 Stock v3.1 doesn't compile on Unity 6.5: `ElevatedTerrainStrategy.cs` uses `GetInstanceID()` and

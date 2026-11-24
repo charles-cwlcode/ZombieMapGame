@@ -4,6 +4,7 @@ using ZombieMap.Core.Encounters;
 using ZombieMap.Core.Geo;
 using ZombieMap.Core.Health;
 using ZombieMap.Core.Items;
+using ZombieMap.Core.Zombies;
 
 namespace ZombieMap.Core.Protocol
 {
@@ -46,6 +47,8 @@ namespace ZombieMap.Core.Protocol
         /// <summary>Move items between you and the safehouse stash (SafehouseItemRequest).</summary>
         public const string SafehouseStore = "safehouse.store";
         public const string SafehouseRetrieve = "safehouse.retrieve";
+        /// <summary>Where you are now (PlayerMoveRequest). Replies with the zombies around you, and a fight if you walked into them.</summary>
+        public const string PlayerMove = "player.move";
 
         // Server → client
         public const string Welcome = "welcome";
@@ -55,6 +58,7 @@ namespace ZombieMap.Core.Protocol
         public const string Inventory = "inventory";
         public const string Loot = "loot";
         public const string Health = "health";
+        public const string Nearby = "world.nearby";
         public const string EncounterState = "encounter.state";
         public const string Error = "error";
     }
@@ -170,6 +174,14 @@ namespace ZombieMap.Core.Protocol
         public LatLng PlayerPosition;
     }
 
+    /// <summary>Sent every few seconds (and after moving) while the map is open.</summary>
+    public sealed class PlayerMoveRequest
+    {
+        public LatLng PlayerPosition;
+        /// <summary>False: show zombies but never start a fight (dev, or while just looking around).</summary>
+        public bool AllowFights = true;
+    }
+
     public sealed class SafehouseClaimRequest
     {
         public string BuildingId;
@@ -251,6 +263,21 @@ namespace ZombieMap.Core.Protocol
         public int SurvivorNumber = 1;
     }
 
+    /// <summary>Reply to player.move: the map cells and zombies around you.</summary>
+    public sealed class NearbyMessage
+    {
+        /// <summary>Your cell and the two rings around it, with zombie counts (for a danger overlay).</summary>
+        public List<ZombieCellView> Cells = new List<ZombieCellView>();
+        /// <summary>Zombies in your cell and the ring around it, where they are right now.</summary>
+        public List<ZombieMarker> Zombies = new List<ZombieMarker>();
+        /// <summary>Your cell's H3 index.</summary>
+        public string Cell;
+        /// <summary>Set when you walked into zombies: the fight that just started.</summary>
+        public EncounterStateMessage Encounter;
+        /// <summary>Server clock (unix ms) the positions are for.</summary>
+        public long TimeMs;
+    }
+
     /// <summary>Your safehouse: a real building, with a stash that outlives each survivor.</summary>
     public sealed class SafehouseView
     {
@@ -288,6 +315,6 @@ namespace ZombieMap.Core.Protocol
 
     public static class ProtocolInfo
     {
-        public const int Version = 5;
+        public const int Version = 6;
     }
 }

@@ -59,13 +59,18 @@ namespace ZombieMap.Core.Encounters
             else
             {
                 var open = Enumerable.Range(0, Lanes.Count).Where(l => !e.BlockedLanes.Contains(l)).ToList();
-                for (int i = 0; i < config.ZombieCount; i++)
+                int count = config.Kinds?.Count ?? config.ZombieCount;
+                for (int i = 0; i < count; i++)
                 {
                     double roll = e.Rng.NextDouble();
-                    var kind = roll < Rules.RunnerSpawnChance ? ZombieKind.Runner
+                    var kind = config.Kinds != null ? config.Kinds[i]
+                        : roll < Rules.RunnerSpawnChance ? ZombieKind.Runner
                         : roll < Rules.RunnerSpawnChance + Rules.CrawlerSpawnChance ? ZombieKind.Crawler
                         : ZombieKind.Shambler;
                     int lane = open[e.Rng.Range(0, open.Count)];
+                    // From the map: the open lane nearest the direction it really came from.
+                    if (config.FromLanes != null && i < config.FromLanes.Count)
+                        lane = open.OrderBy(l => Lanes.Distance(l, config.FromLanes[i])).ThenBy(l => l).First();
                     // Stagger arrivals so they don't all land on the same tick.
                     int stagger = Rules.TicksPerRing(kind) + e.Rng.Range(0, 3);
                     e.AddZombie(kind, lane, Rules.MaxRing, stagger);

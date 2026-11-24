@@ -7,6 +7,7 @@ using ZombieMap.Core.Buildings;
 using ZombieMap.Core.Geo;
 using ZombieMap.Core.Items;
 using ZombieMap.Core.Protocol;
+using ZombieMap.Core.Zombies;
 using ZombieMap.Server.Grains;
 using ZombieMap.Server.World;
 
@@ -217,6 +218,16 @@ public sealed partial class GameSocketHandler(
             case MessageTypes.NewSurvivor:
                 return (ProtocolJson.Write(MessageTypes.Health, await grains.GetGrain<IPlayerGrain>(playerId).NewSurvivor(), env.Id), playerId);
 
+            // ---------- zombies on the map ----------
+
+            case MessageTypes.PlayerMove:
+            {
+                var r = env.DataAs<PlayerMoveRequest>();
+                if (r == null || !r.PlayerPosition.IsValid) return (Error(env.Id, "bad_request", "Send your position."), playerId);
+                var nearby = await grains.GetGrain<IPlayerGrain>(playerId).Move(r.PlayerPosition, r.AllowFights);
+                return (ProtocolJson.Write(MessageTypes.Nearby, nearby, env.Id), playerId);
+            }
+
             // ---------- food, sleep, safehouse ----------
 
             case MessageTypes.HealthEat:
@@ -268,6 +279,9 @@ public sealed partial class GameSocketHandler(
                 if (r == null || !ValidBuildingId(r.BuildingId) || !ValidId(r.ContainerId)) return (Error(env.Id, "bad_request", "Missing building or container."), playerId);
                 await RequireInLootRange(r.BuildingId, r.PlayerPosition);
                 var reply = await grains.GetGrain<IPlayerGrain>(playerId).Search(r.BuildingId, r.ContainerId);
+                // Rummaging makes noise: zombies nearby start drifting this way.
+                if (reply.Status == SearchStatus.Searching && r.PlayerPosition.IsValid)
+                    _ = grains.GetGrain<IZombieCellGrain>(ZombieGrid.CellAt(r.PlayerPosition)).MakeNoise(ZombieRules.SearchNoise, r.PlayerPosition);
                 return (ProtocolJson.Write(MessageTypes.Loot, reply, env.Id), playerId);
             }
 

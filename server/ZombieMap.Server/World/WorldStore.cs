@@ -4,6 +4,7 @@ using Npgsql;
 using ZombieMap.Core.Buildings;
 using ZombieMap.Core.Geo;
 using ZombieMap.Core.Protocol;
+using ZombieMap.Core.Zombies;
 using ZombieMap.Server.Grains;
 
 namespace ZombieMap.Server.World;
@@ -78,6 +79,58 @@ public sealed class WorldStore(NpgsqlDataSource db, IOptions<WorldOptions> optio
     }
 
     public double LootRangeMetres => _options.LootRangeMetres;
+
+    /// <summary>Outer walls of every building within a square around a point (for zombies to walk around).</summary>
+    public async Task<List<List<LatLng>>> GetOutlinesNearAsync(LatLng centre, double halfMetres, CancellationToken ct = default)
+    {
+        await EnsureReadyAsync(ct);
+        var sw = GeoMath.Offset(centre, -halfMetres, -halfMetres);
+        var ne = GeoMath.Offset(centre, halfMetres, halfMetres);
+        await using var cmd = db.CreateCommand("""
+            SELECT ST_AsGeoJSON(ST_SimplifyPreserveTopology(zm_outer_ring(geom), 0.000005))
+            FROM buildings WHERE geom && ST_MakeEnvelope(@w, @s, @e, @n, 4326)
+            """);
+        cmd.Parameters.AddWithValue("w", sw.Lng);
+        cmd.Parameters.AddWithValue("s", sw.Lat);
+        cmd.Parameters.AddWithValue("e", ne.Lng);
+        cmd.Parameters.AddWithValue("n", ne.Lat);
+        var outlines = new List<List<LatLng>>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            if (!reader.IsDBNull(0)) outlines.Add(ParseRing(reader.GetString(0)));
+        return outlines;
+    }
+
+    /// <summary>Buildings whose middle is inside a polygon (a zombie cell), counted by kind.</summary>
+    public async Task<CellBuildings> CountBuildingsAsync(IReadOnlyList<LatLng> outline, CancellationToken ct = default)
+    {
+        await EnsureReadyAsync(ct);
+        string wkt = "POLYGON((" + string.Join(",", outline.Append(outline[0]).Select(p =>
+            string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} {1}", p.Lng, p.Lat))) + "))";
+        await using var cmd = db.CreateCommand("""
+            WITH cell AS (SELECT ST_GeomFromText(@wkt, 4326) AS g)
+            SELECT b.kind, count(*) FROM buildings b, cell
+            WHERE b.geom && cell.g AND ST_Intersects(ST_PointOnSurface(b.geom), cell.g)
+            GROUP BY b.kind
+            """);
+        cmd.Parameters.AddWithValue("wkt", wkt);
+        var counts = new CellBuildings();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            int n = (int)reader.GetInt64(1);
+            switch (ParseKind(reader.GetString(0)))
+            {
+                case BuildingKind.House: counts.Houses += n; break;
+                case BuildingKind.Shop: counts.Shops += n; break;
+                case BuildingKind.Pharmacy: counts.Pharmacies += n; break;
+                case BuildingKind.Office: counts.Offices += n; break;
+                case BuildingKind.Station: counts.Stations += n; break;
+                default: counts.Other += n; break;
+            }
+        }
+        return counts;
+    }
 
     /// <summary>A building's footprint in local metres, ready for the floor-plan generator. Null if unknown.</summary>
     public async Task<BuildingFootprint?> GetFootprintAsync(string buildingId, CancellationToken ct = default)

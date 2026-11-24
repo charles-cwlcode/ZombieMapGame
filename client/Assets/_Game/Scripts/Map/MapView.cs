@@ -43,6 +43,7 @@ namespace ZombieMap.Client.Map
 
         public bool IsMapReady => map != null && map.MapboxMap != null && map.InitializationStatus >= InitializationStatus.Initialized;
         public PlayerLocation Location => location;
+        public Camera MapCamera => mapCamera;
 
         /// <summary>The building the player last tapped (null if none), and what the server said.</summary>
         public BuildingInfo Selected { get; private set; }

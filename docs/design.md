@@ -161,6 +161,50 @@ in, what's wrong with your body.
   layers, splints and glass, and the Character_Gen_POC layered clothing
   (Underwear/Base/Mid/Outer/Overcoat) as the visual side.
 
+### Zombies on the map (phase 2: first cut done)
+- **H3 cells.** Zombies live in H3 hexagons at resolution 9 (~350 m across, ~200 m edges): the
+  same size anywhere on Earth, six neighbours at equal distance. One `ZombieCellGrain` per cell,
+  keyed by its H3 index, shared by every player and saved like everything else.
+- **How many:** counted once from the real buildings in the hexagon: about 1 + 0.06 per house +
+  0.6 per shop + 0.8 per pharmacy + 0.3 per office + 4 per station, ±30% per cell, at most 40.
+  A housing estate gets ~10, an empty field 0–2, a town centre more.
+- **Groups, not single zombies.** A cell's zombies are split into fixed groups: lone stragglers
+  (30%), 2–3 (35%), 4–6 (25%), crowds of 7–12 (10%). Each group is one kind: shamblers (75%),
+  **runners** (15%, packs of at most 6) or **crawlers** (10%). One marker per group, labelled with
+  its size ("5", "3 fast", "2 slow").
+- **Hordes** are the biggest groups: 15–35 shamblers roaming a region (an H3 resolution-7 hexagon,
+  ~1.2 km, 49 cells), one or two per region. They walk from cell to cell at 0.3 m/s, rest 2–8
+  minutes at each stop, and their route is planned half an hour ahead, so they move whether or not
+  anyone is watching. Under 5 left, a horde breaks up.
+- **Walking around buildings.** Each cell grain loads the building outlines around it (its cell plus
+  250 m) into a 2.5 m grid. Routes are A* over that grid, searched in a window around start and end,
+  then straightened wherever there's a clear line. Every group has a patrol loop of 3–5 points
+  round its home, each leg clear of buildings.
+- **Every player sees the same zombies.** A group's motion is its loop plus any trips (a chase, a
+  drift to a noise, the walk home), each a path with a start time and speed (`ZombieMotion`). Where
+  it is at any moment comes from that and the clock. The server sends motions and the client
+  walks them with the same shared code, so markers move smoothly and agree with the server.
+- **Noticing and chasing.** A group that can see you (no building in the way) within its notice
+  range (runners 35 m, shamblers 25 m, crawlers 15 m) comes for you: runners at 2.6 m/s (faster
+  than walking: run or fight), shamblers 0.9, crawlers 0.4. It gives up past 60 m and walks home. A
+  horde within 30 m lurches toward you. Untick **Attacks** and nothing notices you.
+- **Fights.** A group within 12 m starts one; every group within 35 m joins, nearest first, up to
+  12 zombies. Each fight zombie is its group's kind and comes from the lane it really is (the
+  nearest open lane in an alley). The arena comes from how built-up the cell is (street, car park,
+  field). After a fight on the map there's a 45 s grace period to get away. Asleep at the
+  safehouse, nothing comes for you (yet).
+- **The dead stay dead:** kills come off their groups (nearest groups first), for everyone. A cell
+  gets one zombie back every 20 minutes.
+- **Noise:** searching makes 1 noise, a fight starting 2. In the noisy cell and its neighbours,
+  15% of idle groups per point of noise (at most 60%) within 450 m walk over, hang about 3–6
+  minutes, then wander home. Hordes within 700 m head for it. Noise halves every 5 minutes.
+- **On the map:** markers sized by group (hordes dark and big), coloured by kind, pulsing when
+  they're coming for you; hexagon outlines coloured by how many zombies are in them (green ≤2,
+  amber ≤9, red more). Map tab toggles: **Attacks** and **Hexes**.
+- **Still to come:** zombies finding your safehouse, the zombie virus turning infected survivors,
+  gunshots (lots of noise), night (more and faster zombies), arenas from real land use (woods,
+  car parks), and roads (zombies keep to open ground but don't follow streets).
+
 ### Special buildings, events, bases (phase 3+)
 - Special buildings work like gyms with survival stakes: clear, hold, supply; control decays.
   Train station = remote raids on buildings along the line. Power plant = district power.
@@ -210,7 +254,7 @@ client/  Unity 6000.5 (URP) ──WebSocket JSON──▶ server/ZombieMap.Serve
 1. **Vertical slice.** ✅ Walk the map, loot a house room by room, weight-based inventory.
    ✅ Wounds and clothing check, healing with your own supplies, dying.
    ✅ Eating and drinking, sleeping at a safehouse, a survivor line on death.
-2. Zombies and hordes on the map, noise, infection, spoilage, crafting, real weather,
+2. ✅ Zombies on the map: groups, hordes, chasing, noise, pathfinding (first cut). ⬜ Infection, spoilage, crafting, real weather,
    the AI item pipeline.
 3. Special buildings, events, factions, remote raids.
 4. Full bases, survivors, offline horde defence.

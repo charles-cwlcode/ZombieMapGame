@@ -62,6 +62,17 @@ namespace ZombieMap.Client.Dev
             StartEncounter();
         }
 
+        /// <summary>Take over a fight the server started, e.g. when the player walked into zombies on the map.</summary>
+        public void Adopt(EncounterStateMessage started)
+        {
+            _encounterId = started.EncounterId;
+            _view = started.Result.View;
+            _arena = _view.Arena;
+            _log.Clear();
+            Log($"You walked into {_view.ZombiesRemaining} zombie{(_view.ZombiesRemaining == 1 ? "" : "s")} ({_arena}).");
+            _lastActionTime = Time.unscaledTime;
+        }
+
         // ------------------------------------------------------------------ drawing
 
         public void OnGUI(Rect area)

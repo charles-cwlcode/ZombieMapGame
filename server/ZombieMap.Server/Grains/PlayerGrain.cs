@@ -1,3 +1,6 @@
+using ZombieMap.Core.Geo;
+using ZombieMap.Core.Zombies;
+using ZombieMap.Server.World;
 using ZombieMap.Core.Buildings;
 using ZombieMap.Core.Encounters;
 using ZombieMap.Core.Health;
@@ -21,6 +24,12 @@ public sealed class PlayerState
     [Id(7)] public SafehouseView? Safehouse { get; set; }
     /// <summary>Which survivor in the line this is (1 = the first).</summary>
     [Id(8)] public int SurvivorNumber { get; set; } = 1;
+    /// <summary>Where the player last said they were (player.move).</summary>
+    [Id(9)] public LatLng? LastPosition { get; set; }
+    /// <summary>The map zombies ("cell:index", nearest first) in the active fight, if it started on the map.</summary>
+    [Id(10)] public List<string>? FightZombies { get; set; }
+    /// <summary>When the last fight on the map ended (unix seconds), for the cooldown.</summary>
+    [Id(11)] public long MapFightEnded { get; set; }
 }
 
 public sealed class PlayerGrain(
@@ -44,12 +53,17 @@ public sealed class PlayerGrain(
         };
     }
 
-    public async Task<EncounterStateMessage> StartEncounter(StartEncounterRequest request)
+    public Task<EncounterStateMessage> StartEncounter(StartEncounterRequest request) =>
+        StartFight(request.Arena, Math.Clamp(request.ZombieCount, 1, MaxZombies), null, null);
+
+    /// <summary>Starts a fight. From the map, <paramref name="kinds"/> and <paramref name="lanes"/> say who is coming and from where.</summary>
+    private async Task<EncounterStateMessage> StartFight(ArenaKind arena, int count, List<ZombieKind>? kinds, List<int>? lanes)
     {
         var body = Body();
         RequireAlive();
         // Phase 0: starting a new encounter abandons the old one. Later: resume it instead.
         state.State.EncountersStarted++;
+        state.State.FightZombies = null; // a dev-forced fight replaces a map fight: its zombies go back to the map
         string encounterId = $"{this.GetPrimaryKeyString()}/{state.State.EncountersStarted}";
 
         // You fight with the body, clothes and medical supplies you actually have.
@@ -58,8 +72,10 @@ public sealed class PlayerGrain(
         var config = new EncounterConfig
         {
             Seed = (ulong)Random.Shared.NextInt64(),
-            Arena = request.Arena,
-            ZombieCount = Math.Clamp(request.ZombieCount, 1, MaxZombies),
+            Arena = arena,
+            ZombieCount = count,
+            Kinds = kinds,
+            FromLanes = lanes,
             StartSupplies = supplies,
             StartBlood = body.Blood,
             StartEndurance = body.Endurance,
@@ -94,9 +110,125 @@ public sealed class PlayerGrain(
             }
             state.State.EncounterSupplies = null;
             state.State.ActiveEncounterId = null;
+            await EndMapFight(result.View);
             await state.WriteStateAsync();
         }
         return new EncounterStateMessage { EncounterId = encounterId, Result = result };
+    }
+
+    // ------------------------------------------------------------------ zombies on the map
+
+    /// <summary>Cells are looked at two rings out; groups within this distance are sent.</summary>
+    private const int CellRings = 2;
+    private const double ShowMetres = 450;
+
+    /// <summary>
+    /// The player is here now. Groups that see them give chase, hordes close by lurch over, and if a
+    /// group is within <see cref="ZombieRules.EngageMetres"/> a fight starts: groups within
+    /// <see cref="ZombieRules.JoinMetres"/> join, nearest first, up to <see cref="ZombieRules.MaxInFight"/>
+    /// zombies, each coming from the direction it really is. The ones you kill are gone for everyone.
+    /// </summary>
+    public async Task<NearbyMessage> Move(LatLng position, bool allowFights)
+    {
+        state.State.LastPosition = position;
+        long nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        string me = this.GetPrimaryKeyString();
+        bool notice = allowFights && CanBeNoticed();
+        string here = ZombieGrid.CellAt(position);
+        var disk = ZombieGrid.Disk(here, CellRings);
+        var cellTask = Task.WhenAll(disk.Select(d => GrainFactory.GetGrain<IZombieCellGrain>(d.cell).React(me, position, nowMs, notice)));
+        var hordeIds = ZombieGrid.RegionsAround(here)
+            .SelectMany(r => Enumerable.Range(0, HordeRules.HordesIn(r)).Select(n => HordeRules.HordeId(r, n))).ToList();
+        var hordeTask = Task.WhenAll(hordeIds.Select(id => GrainFactory.GetGrain<IHordeGrain>(id).Get(nowMs)));
+        var reports = await cellTask;
+        var hordes = await hordeTask;
+
+        var reply = new NearbyMessage { Cell = here, TimeMs = nowMs };
+        for (int i = 0; i < disk.Count; i++)
+        {
+            reply.Cells.Add(new ZombieCellView { Cell = disk[i].cell, Outline = ZombieGrid.Outline(disk[i].cell), Zombies = reports[i].Alive, Noise = reports[i].Noise });
+            reply.Zombies.AddRange(reports[i].Groups.Where(g => GeoMath.Distance(position, g.Position) <= ShowMetres));
+        }
+        foreach (var h in hordes)
+            if (h.Marker != null && GeoMath.Distance(position, h.Marker.Position) <= ShowMetres * 1.5)
+            {
+                reply.Zombies.Add(h.Marker);
+                if (notice && GeoMath.Distance(position, h.Marker.Position) <= HordeRules.NoticeMetres)
+                    _ = GrainFactory.GetGrain<IHordeGrain>(h.Marker.Id.TrimEnd('#')).Notice(position, nowMs);
+            }
+
+        var near = reply.Zombies.Select(z => (marker: z, metres: GeoMath.Distance(position, z.Position))).OrderBy(z => z.metres).ToList();
+        if (allowFights && CanStartMapFight(nowMs / 1000) && near.Count > 0 && near[0].metres <= ZombieRules.EngageMetres)
+        {
+            var kinds = new List<ZombieKind>();
+            var lanes = new List<int>();
+            var fighters = new List<string>();
+            foreach (var (marker, metres) in near)
+            {
+                if (metres > ZombieRules.JoinMetres || kinds.Count >= ZombieRules.MaxInFight) break;
+                int n = Math.Min(marker.Count, ZombieRules.MaxInFight - kinds.Count);
+                int lane = LaneTowards(position, marker.Position);
+                for (int k = 0; k < n; k++)
+                {
+                    kinds.Add(marker.Kind);
+                    lanes.Add(lane);
+                }
+                fighters.Add($"{marker.Id}|{n}");
+            }
+            var buildings = reports[disk.FindIndex(d => d.cell == here)].Buildings;
+            reply.Encounter = await StartFight(ZombieRules.ArenaFor(buildings), kinds.Count, kinds, lanes);
+            state.State.FightZombies = fighters;
+            _ = GrainFactory.GetGrain<IZombieCellGrain>(here).MakeNoise(ZombieRules.FightNoise, position);
+        }
+        await state.WriteStateAsync();
+        return reply;
+    }
+
+    /// <summary>The encounter lane (0 = N, clockwise in 45° steps) a zombie at <paramref name="zombie"/> comes from.</summary>
+    private static int LaneTowards(LatLng player, LatLng zombie)
+    {
+        var v = GeoMath.ToLocal(player, zombie);
+        double bearing = Math.Atan2(v.X, v.Y) * 180 / Math.PI; // 0 = north, 90 = east
+        return Lanes.Rotate((int)Math.Round(bearing / 45.0), 0);
+    }
+
+    /// <summary>Asleep at the safehouse, dead or mid-fight: zombies don't come for you (yet).</summary>
+    private bool CanBeNoticed()
+    {
+        if (state.State.ActiveEncounterId != null) return false;
+        var body = Body();
+        return !body.Dead && !body.Asleep;
+    }
+
+    private bool CanStartMapFight(long now) =>
+        CanBeNoticed() && now - state.State.MapFightEnded >= ZombieRules.FightCooldownSeconds;
+
+    /// <summary>After a fight that started on the map: the zombies you killed are gone from their groups.</summary>
+    private async Task EndMapFight(EncounterView view)
+    {
+        var fighters = state.State.FightZombies;
+        if (fighters == null) return;
+        state.State.FightZombies = null;
+        state.State.MapFightEnded = Now();
+
+        // The fight doesn't know which of its zombies came from which group: the nearest groups lose them first.
+        int total = 0;
+        foreach (var f in fighters) total += int.Parse(f[(f.LastIndexOf('|') + 1)..]);
+        int killed = Math.Max(0, total - view.ZombiesRemaining);
+        var kills = new List<Task<int>>();
+        foreach (var f in fighters)
+        {
+            if (killed <= 0) break;
+            int bar = f.LastIndexOf('|');
+            string id = f[..bar];
+            int n = Math.Min(killed, int.Parse(f[(bar + 1)..]));
+            killed -= n;
+            if (ZombieRules.TryParseMarker(id, out var cell, out int group))
+                kills.Add(GrainFactory.GetGrain<IZombieCellGrain>(cell).Kill(group, n));
+            else if (HordeRules.TryParseMarker(id, out var horde))
+                kills.Add(GrainFactory.GetGrain<IHordeGrain>(horde).Kill(n));
+        }
+        await Task.WhenAll(kills);
     }
 
     // ------------------------------------------------------------------ inventory

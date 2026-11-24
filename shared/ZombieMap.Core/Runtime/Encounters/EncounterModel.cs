@@ -77,6 +77,13 @@ namespace ZombieMap.Core.Encounters
         public int StartFacing;
         /// <summary>Optional: exact zombies instead of random ones.</summary>
         public List<ZombieSpawn> Spawns;
+        /// <summary>
+        /// Optional: the kind of each zombie (from the groups on the map), instead of rolling them.
+        /// When set, it decides how many zombies there are.
+        /// </summary>
+        public List<ZombieKind> Kinds;
+        /// <summary>Optional, with <see cref="Kinds"/>: the lane each one comes from (where it was on the map).</summary>
+        public List<int> FromLanes;
         /// <summary>Optional: overrides the arena's blocked lanes.</summary>
         public List<int> BlockedLanes;
         /// <summary>Optional: overrides the default supplies (the server passes what's in your inventory).</summary>

@@ -51,7 +51,7 @@ namespace ZombieMap.Client.Dev
             }
 
             var loc = _map.Location;
-            InfoRect = new Rect(area.x, area.y, 300, _map.Selected != null ? 384 : 280);
+            InfoRect = new Rect(area.x, area.y, 300, _map.Selected != null ? 430 : 326);
             GUILayout.BeginArea(InfoRect, GUI.skin.box);
 
             GUILayout.BeginHorizontal();
@@ -85,12 +85,28 @@ namespace ZombieMap.Client.Dev
             GUILayout.EndArea();
         }
 
-        /// <summary>
-        /// Dev shortcut until map zombies exist (phase 2): jump straight into a fight.
-        /// Later the arena will come from the real land use where you're standing.
-        /// </summary>
+        /// <summary>Zombies on the map (set by the HUD once the map exists).</summary>
+        public ZombieLayer Zombies { get; set; }
+
+        private void DrawZombies()
+        {
+            if (Zombies == null) return;
+            GUILayout.Label(Zombies.Status, Small);
+            GUILayout.BeginHorizontal();
+            if (Zombies.ChasingCount > 0)
+                GUILayout.Label($"<color=#ffd040>{Zombies.ChasingCount} coming for you!</color>", Rich, GUILayout.Width(170));
+            else if (Zombies.NearestMetres is double near)
+                GUILayout.Label($"Nearest {near:0} m (fight at {ZombieMap.Core.Zombies.ZombieRules.EngageMetres:0} m)", GUILayout.Width(170));
+            bool fights = GUILayout.Toggle(Zombies.AllowFights, "Attacks", GUILayout.Width(70));
+            if (fights != Zombies.AllowFights) { Zombies.AllowFights = fights; Zombies.Refresh(); }
+            Zombies.ShowCells = GUILayout.Toggle(Zombies.ShowCells, "Hexes");
+            GUILayout.EndHorizontal();
+        }
+
+        /// <summary>Dev shortcut: jump straight into a fight anywhere, whatever's on the map.</summary>
         private void DrawForceEncounter()
         {
+            DrawZombies();
             GUILayout.BeginHorizontal();
             GUILayout.Label("Force encounter", GUILayout.Width(105));
             GUILayout.Label($"{_forceZombies} zombies", GUILayout.Width(70));
