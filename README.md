@@ -39,7 +39,7 @@ dotnet run --project server/ZombieMap.DevClient
 ```
 
 Then open `client/` in Unity, open `Assets/_Game/Scenes/Dev.unity` (or run
-**ZombieMap → Create Dev Scene**) and press Play. The dev HUD has four tabs:
+**ZombieMap → Create Dev Scene**) and press Play. The dev HUD has five tabs:
 
 - **Map**: the Mapbox map around you. In the editor the GPS is simulated: **WASD/arrows** walk
   (relative to the camera), **Shift** runs, **Ctrl** drives, **Q/E** or drag rotates, scroll zooms.
@@ -52,7 +52,12 @@ Then open `client/` in Unity, open `Assets/_Game/Scenes/Dev.unity` (or run
   seconds, timed by the server), then **Take** items or put them **To bag**. Hand-made test buildings
   can be made with the controls at the top.
 - **Inventory**: pockets (8 kg) and the bag on your back, with weights. Move items between them, wear
-  or take off a bag, drop items, or **Put** them into the container you last searched.
+  or take off a bag, drop items, or **Put** them into the container you last searched. **Wear** or
+  **Take off** clothes.
+- **Health**: your survivor's body in 3D, each zone green, amber, red or black. Callout boxes show
+  each wound with buttons to bandage, disinfect or stitch it using what you carry. Blood, endurance,
+  antibiotics and what you're wearing are along the edges. Drag or Q/E to turn; tap a zone for details.
+  **New survivor** starts over after death.
 
 **Mapbox token:** set it in Unity (Mapbox → Setup). It's saved in
 `client/Assets/Resources/Mapbox/MapboxConfiguration.txt`, which is git-ignored.
@@ -83,6 +88,12 @@ Unity ↔ server round trip (no graphics needed):
 - ✅ Mapbox v3 map in Unity with keyboard GPS simulation; tap a real building → type, loot range, floor plan
 - ⬜ Mapbox v3 map on a real phone (device GPS is wired up; needs a phone test)
 - ⬜ CC5 character performance on a mid-range Android phone
+
+## Phase 1 status
+- ✅ Looting room by room, weight-based inventory with a worn bag
+- ✅ Health and body: wounds that last in real time, treatment with your own supplies, clothing that
+  blocks hits and wears, encounters that use your real body and bag, death and a new survivor
+- ⬜ Eating and drinking, sleeping at a safehouse
 
 ## Mapbox SDK v3.1 needs a patch for Unity 6000.5
 Stock v3.1 doesn't compile on Unity 6.5: `ElevatedTerrainStrategy.cs` uses `GetInstanceID()` and

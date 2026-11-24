@@ -136,6 +136,10 @@ namespace ZombieMap.Core.Encounters
 
         public const double ScratchBleedChance = 0.5;
 
+        /// <summary>Condition a piece of clothing loses when it stops a hit / when a hit gets through it.</summary>
+        public const double ClothingWearOnBlock = 0.08;
+        public const double ClothingWearOnHit = 0.04;
+
         /// <summary>Per tick, with N standing zombies on you, chance to be dragged down = 0.12 × (N − 1).</summary>
         public const double DraggedDownPerExtraZombie = 0.12;
 

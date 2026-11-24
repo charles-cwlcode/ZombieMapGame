@@ -9,10 +9,10 @@ namespace ZombieMap.Client.Dev
     /// </summary>
     public sealed class InventoryDebugPanel
     {
-        private readonly LootSession _loot;
+        private readonly PlayerSession _loot;
         private Vector2 _scroll;
 
-        public InventoryDebugPanel(LootSession loot) => _loot = loot;
+        public InventoryDebugPanel(PlayerSession loot) => _loot = loot;
 
         public void OnGUI(Rect area)
         {
@@ -59,6 +59,18 @@ namespace ZombieMap.Client.Dev
                 GUILayout.Label("No bag on your back. Pick up a backpack and press Wear.");
             }
 
+            GUILayout.Space(10);
+            GUILayout.Label("<b>Wearing</b>", Rich);
+            if (inv.Worn.Count == 0) GUILayout.Label("   Nothing.");
+            foreach (var c in inv.Worn)
+            {
+                GUILayout.BeginHorizontal();
+                GUILayout.Label($"   {Describe(c, c.Def())}  [{c.Def().Slot}]", GUILayout.Width(330));
+                GUILayout.Label($"{InventoryRules.Weight(c):0.00} kg", GUILayout.Width(60));
+                if (GUILayout.Button("Take off", GUILayout.Width(75))) _ = _loot.TakeOff(c.Id);
+                GUILayout.EndHorizontal();
+            }
+
             GUI.enabled = true;
             GUILayout.EndScrollView();
             GUILayout.EndArea();
@@ -78,6 +90,7 @@ namespace ZombieMap.Client.Dev
                 if (!inBag && inv.Back != null && GUILayout.Button("To bag", GUILayout.Width(65))) _ = _loot.Move(s.Id, PlayerInventory.BackId);
                 if (inBag && GUILayout.Button("To pockets", GUILayout.Width(80))) _ = _loot.Move(s.Id, PlayerInventory.MainId);
                 if (!inBag && def.IsBag && def.WornOnBack && GUILayout.Button("Wear", GUILayout.Width(55))) _ = _loot.Equip(s.Id);
+                if (def.IsClothing && GUILayout.Button("Wear", GUILayout.Width(55))) _ = _loot.Wear(s.Id);
                 if (_loot.OpenContainer != null && GUILayout.Button("Put", GUILayout.Width(45))) _ = _loot.Put(s.Id);
                 if (GUILayout.Button("Drop", GUILayout.Width(50))) _ = _loot.Drop(s.Id);
                 GUILayout.EndHorizontal();

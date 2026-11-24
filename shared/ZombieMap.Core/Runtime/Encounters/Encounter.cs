@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using ZombieMap.Core.Health;
+using ZombieMap.Core.Items;
 using ZombieMap.Core.Rng;
 
 namespace ZombieMap.Core.Encounters
@@ -38,6 +40,10 @@ namespace ZombieMap.Core.Encounters
                 {
                     Facing = Lanes.Rotate(config.StartFacing, 0),
                     Supplies = (config.StartSupplies ?? new Supplies()).Clone(),
+                    Blood = config.StartBlood,
+                    Endurance = config.StartEndurance,
+                    Wounds = config.StartWounds?.Select(w => w.Clone()).ToList() ?? new List<Wound>(),
+                    Worn = config.Worn?.Select(CloneWorn).ToList() ?? new List<ItemStack>(),
                 },
             };
 
@@ -301,9 +307,10 @@ namespace ZombieMap.Core.Encounters
                 case EncounterActionKind.PatchHeal:
                 {
                     var w = FindWound(a.WoundIndex, x => x.Bleeding);
-                    if (s.Supplies.Rags > 0) s.Supplies.Rags--; else s.Supplies.Bandages--;
+                    bool rag = s.Supplies.Rags > 0;
+                    if (rag) s.Supplies.Rags--; else s.Supplies.Bandages--;
                     w.Bleeding = false;
-                    if (w.Treatment == WoundTreatment.None) w.Treatment = WoundTreatment.Patched;
+                    if (w.Bandage == BandageKind.None) w.Bandage = rag ? BandageKind.Rag : BandageKind.Bandage;
                     events.Add(new EncounterEvent { Tick = Tick, Kind = EncounterEventKind.Healed, Part = w.Part, Wound = w.Kind, Text = $"You tie off the {Pretty(w.Part)}. The bleeding stops." });
                     break;
                 }
@@ -313,7 +320,11 @@ namespace ZombieMap.Core.Encounters
                     s.Supplies.Bandages--;
                     s.Supplies.Disinfectant--;
                     w.Bleeding = false;
-                    w.Treatment = WoundTreatment.Treated;
+                    w.Bandage = BandageKind.Bandage;
+                    w.BandagedAt = 0; // stamped with real time when the encounter ends
+                    w.Disinfected = true;
+                    w.Infected = false;
+                    w.DirtySeconds = 0;
                     events.Add(new EncounterEvent { Tick = Tick, Kind = EncounterEventKind.Healed, Part = w.Part, Wound = w.Kind, Text = $"You clean and bandage the {Pretty(w.Part)}." });
                     break;
                 }
@@ -417,7 +428,7 @@ namespace ZombieMap.Core.Encounters
             var kind = roll < Rules.WoundScratchChance ? WoundKind.Scratch
                 : roll < Rules.WoundScratchChance + Rules.WoundLacerationChance ? WoundKind.Laceration
                 : WoundKind.Bite;
-            // TODO(phase 1): clothing layers on this body part get a chance to stop or downgrade the wound.
+            if (ClothingBlocks(z, part, kind, events)) return;
             var wound = new Wound
             {
                 Part = part,
@@ -433,6 +444,38 @@ namespace ZombieMap.Core.Encounters
                 Text = $"{kind} on your {Pretty(part)}!" + (wound.Bleeding ? " It's bleeding." : ""),
             });
         }
+
+        /// <summary>
+        /// Clothes covering the hit zone get a chance to stop it, outer layer first. Bites use bite
+        /// defence, scratches and lacerations scratch defence, both scaled by condition. Clothes
+        /// wear down whether or not they hold.
+        /// </summary>
+        private bool ClothingBlocks(Zombie z, BodyPart part, WoundKind kind, List<EncounterEvent> events)
+        {
+            if (Survivor.Worn.Count == 0) return false; // no extra dice rolls without clothes
+            foreach (var item in Survivor.Worn.OrderByDescending(i => i.Def().Layer))
+            {
+                var def = item.Def();
+                if (def.Covers == null || Array.IndexOf(def.Covers, part) < 0 || item.Condition <= 0) continue;
+                double defense = (kind == WoundKind.Bite ? def.BiteDefense : def.ScratchDefense) * item.Condition;
+                bool blocked = Rng.Chance(defense);
+                item.Condition = Math.Max(0, Math.Round(item.Condition - (blocked ? Rules.ClothingWearOnBlock : Rules.ClothingWearOnHit), 3));
+                if (!blocked) continue;
+                events.Add(new EncounterEvent
+                {
+                    Tick = Tick, Kind = EncounterEventKind.Blocked, ZombieId = z.Id, Lane = z.Lane, Part = part, Wound = kind,
+                    Text = $"Your {def.Name.ToLowerInvariant()} stops a {kind.ToString().ToLowerInvariant()} on your {Pretty(part)}." +
+                           (item.Condition <= 0 ? " It's torn to shreds." : ""),
+                });
+                return true;
+            }
+            return false;
+        }
+
+        private static ItemStack CloneWorn(ItemStack s) => new ItemStack
+        {
+            Id = s.Id, ItemId = s.ItemId, Count = s.Count, Condition = s.Condition, UsesLeft = s.UsesLeft, FreshUntilDay = s.FreshUntilDay,
+        };
 
         private BodyPart PickWeighted(IReadOnlyList<KeyValuePair<BodyPart, int>> weights)
         {
@@ -526,7 +569,7 @@ namespace ZombieMap.Core.Encounters
                 view.Sounds.Add(new SoundCue { Lane = kv.Key, Close = kv.Value });
 
             foreach (var w in s.Wounds)
-                view.Wounds.Add(new WoundView { Part = w.Part, Kind = w.Kind, Bleeding = w.Bleeding, Treatment = w.Treatment });
+                view.Wounds.Add(BodyRules.ToView(w, 0));
 
             return view;
         }

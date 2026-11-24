@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ZombieMap.Core.Health;
+using ZombieMap.Core.Items;
 
 namespace ZombieMap.Core.Encounters
 {
@@ -78,8 +79,16 @@ namespace ZombieMap.Core.Encounters
         public List<ZombieSpawn> Spawns;
         /// <summary>Optional: overrides the arena's blocked lanes.</summary>
         public List<int> BlockedLanes;
-        /// <summary>Optional: overrides the default supplies.</summary>
+        /// <summary>Optional: overrides the default supplies (the server passes what's in your inventory).</summary>
         public Supplies StartSupplies;
+
+        // The survivor's real state going in (the server fills these from the player's body).
+        public int StartBlood = 100;
+        public int StartEndurance = 100;
+        /// <summary>Wounds you already have. They keep bleeding in the fight if they were.</summary>
+        public List<Wound> StartWounds;
+        /// <summary>Clothes being worn. They can stop bites and scratches, and tear doing it.</summary>
+        public List<ItemStack> Worn;
     }
 
     public sealed class Zombie
@@ -106,13 +115,14 @@ namespace ZombieMap.Core.Encounters
         public int Blood = 100;
         public List<Wound> Wounds = new List<Wound>();
         public Supplies Supplies = new Supplies();
+        public List<ItemStack> Worn = new List<ItemStack>();
     }
 
     public enum EncounterEventKind
     {
         Turned, Moved, ReachedYou, Missed, Hit, Killed, Crippled,
         Pushed, PushFailed, GotUp, Stomped,
-        GrabMissed, Wounded, Interrupted, Healed,
+        GrabMissed, Wounded, Blocked, Interrupted, Healed,
         Fled, FleeFailed, DraggedDown, BledOut, Won, Rested,
     }
 
@@ -151,10 +161,19 @@ namespace ZombieMap.Core.Encounters
 
     public sealed class WoundView
     {
+        /// <summary>0 for wounds made in the current encounter (they get an ID afterwards).</summary>
+        public int Id;
         public BodyPart Part;
         public WoundKind Kind;
         public bool Bleeding;
         public WoundTreatment Treatment;
+        public BandageKind Bandage;
+        public bool BandageDirty;
+        public bool Disinfected;
+        public bool Stitched;
+        public bool Infected;
+        /// <summary>0..1.</summary>
+        public double Healed;
     }
 
     public sealed class EncounterView

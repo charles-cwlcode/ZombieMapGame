@@ -25,6 +25,7 @@ namespace ZombieMap.Client.Editor
     {
         private const string RunningKey = "zm.mapTest.running";
         private const string ShotKey = "zm.mapTest.screenshot";
+        private const string UrlKey = "zm.mapTest.serverUrl";
         private const double TimeoutSeconds = 150;
 
         private static double _startTime;
@@ -42,6 +43,8 @@ namespace ZombieMap.Client.Editor
             var args = Environment.GetCommandLineArgs();
             int i = Array.IndexOf(args, "-screenshot");
             SessionState.SetString(ShotKey, i >= 0 && i + 1 < args.Length ? args[i + 1] : "Temp/map-test.png");
+            int u = Array.IndexOf(args, "-serverUrl");
+            SessionState.SetString(UrlKey, u >= 0 && u + 1 < args.Length ? args[u + 1] : "");
             SessionState.SetBool(RunningKey, true);
             EditorApplication.update -= Tick; // in case domain reload on Play is turned off
             EditorApplication.update += Tick;
@@ -62,6 +65,14 @@ namespace ZombieMap.Client.Editor
             var view = Object.FindAnyObjectByType<MapView>();
             var client = Object.FindAnyObjectByType<GameClient>();
             if (view == null || client == null) { _step = "finding scene objects"; return; }
+            string url = SessionState.GetString(UrlKey, "");
+            if (url.Length > 0 && client.ServerUrl != url) client.ServerUrl = url;
+            if (url.Length > 0 && !client.IsConnected && !client.IsConnecting)
+            {
+                _ = client.ConnectAsync(); // the scene's own connect may have gone to the default URL
+                _step = "connecting to " + url;
+                return;
+            }
             if (!client.IsConnected) { _step = "connecting: " + client.Status; return; }
             if (!view.Location.HasFix) { _step = "waiting for GPS start point"; return; }
             if (!view.IsMapReady) { _step = "waiting for map"; return; }
@@ -97,7 +108,8 @@ namespace ZombieMap.Client.Editor
                 await Task.Delay(3000); // screenshot is written at the end of a later frame
 
                 bool looted = await LootChecks(plan, found, shot);
-                Finish(plan.Rooms.Count > 0 && looted, "screenshots " + shot);
+                bool health = await HealthChecks(client, shot);
+                Finish(plan.Rooms.Count > 0 && looted && health, "screenshots " + shot);
             }
             catch (Exception ex)
             {
@@ -115,7 +127,7 @@ namespace ZombieMap.Client.Editor
             Debug.Log($"[MapTest] Searching {room.Containers.Count} containers in the {room.Type}… {hud.Loot.Message}");
 
             for (int i = 0; i < 60 && room.Containers.Any(c => hud.Loot.Container(c.Id)?.Contents == null); i++)
-                await Task.Delay(200); // DevHud.Update → LootSession.Tick finishes each search when its time is up
+                await Task.Delay(200); // DevHud.Update → PlayerSession.Tick finishes each search when its time is up
             var searched = room.Containers.Select(c => hud.Loot.Container(c.Id)?.Contents).ToList();
             if (searched.Any(c => c == null)) { Debug.LogError("[MapTest] Searches didn't finish: " + hud.Loot.Message); return false; }
             Debug.Log("[MapTest] Found: " + string.Join("; ", searched.Select(c => $"{c.Name}: {c.Items.Count} items")));
@@ -137,6 +149,54 @@ namespace ZombieMap.Client.Editor
             ScreenCapture.CaptureScreenshot(shot.Replace(".png", "-inventory.png"));
             await Task.Delay(2000);
             return took;
+        }
+
+        /// <summary>Get hurt in a quick fight, then look at the 3D health screen and bandage a wound.</summary>
+        private static async Task<bool> HealthChecks(GameClient client, string shot)
+        {
+            var hud = Object.FindAnyObjectByType<Dev.DevHud>();
+            var session = hud.Loot;
+            for (int attempt = 0; attempt < 6; attempt++)
+            {
+                await session.RefreshHealth();
+                if (session.Body.Dead) { await session.NewSurvivor(); continue; }
+                if (session.Body.Wounds.Count > 0) break;
+                var start = await client.Connection.RequestAsync<EncounterStateMessage>(MessageTypes.StartEncounter,
+                    new StartEncounterRequest { Arena = Core.Encounters.ArenaKind.Field, ZombieCount = 3 });
+                var v = start.Result.View;
+                // Stand still until something bites, then run.
+                for (int i = 0; i < 40 && v.Status == Core.Encounters.EncounterStatus.Ongoing; i++)
+                {
+                    var act = v.Wounds.Count > 0 ? Core.Encounters.EncounterActionKind.Flee : Core.Encounters.EncounterActionKind.Wait;
+                    var r = await client.Connection.RequestAsync<EncounterStateMessage>(MessageTypes.EncounterAct,
+                        new EncounterActRequest { EncounterId = start.EncounterId, Action = Core.Encounters.EncounterAction.Of(act) });
+                    if (!r.Result.Accepted)
+                        r = await client.Connection.RequestAsync<EncounterStateMessage>(MessageTypes.EncounterAct,
+                            new EncounterActRequest { EncounterId = start.EncounterId, Action = Core.Encounters.EncounterAction.Of(Core.Encounters.EncounterActionKind.Wait) });
+                    v = r.Result.View;
+                }
+                Debug.Log($"[MapTest] Fight {attempt + 1}: {v.Status}, {v.Wounds.Count} wounds");
+            }
+            await session.RefreshHealth();
+            var body = session.Body;
+            if (body == null || body.Dead || body.Wounds.Count == 0) { Debug.LogError("[MapTest] Couldn't get a living, wounded survivor."); return false; }
+            Debug.Log("[MapTest] Wounds: " + string.Join("; ", body.Wounds.Select(w => $"{w.Kind} {w.Part} bleeding={w.Bleeding}")));
+
+            hud.ShowHealth();
+            await Task.Delay(1500);
+            ScreenCapture.CaptureScreenshot(shot.Replace(".png", "-health.png"));
+            await Task.Delay(2000);
+
+            var wound = body.Wounds.First();
+            var action = session.Inventory.CountOf(d => d.Medical == Core.Items.MedicalUse.Rag) > 0
+                ? Core.Health.TreatAction.BandageWithRag : Core.Health.TreatAction.BandageWithBandage;
+            await session.Treat(wound.Id, action);
+            bool bandaged = session.Body.Wounds.Any(w => w.Id == wound.Id && w.Bandage != Core.Health.BandageKind.None && !w.Bleeding);
+            Debug.Log($"[MapTest] Bandaged {wound.Part}: {bandaged} {session.Message}");
+            await Task.Delay(800);
+            ScreenCapture.CaptureScreenshot(shot.Replace(".png", "-health-treated.png"));
+            await Task.Delay(2000);
+            return bandaged;
         }
 
         private static void Finish(bool ok, string detail)

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using ZombieMap.Core.Buildings;
 using ZombieMap.Core.Encounters;
 using ZombieMap.Core.Geo;
+using ZombieMap.Core.Health;
 using ZombieMap.Core.Items;
 
 namespace ZombieMap.Core.Protocol
@@ -28,6 +29,13 @@ namespace ZombieMap.Core.Protocol
         public const string LootSearch = "loot.search";
         public const string LootTake = "loot.take";
         public const string LootPut = "loot.put";
+        public const string HealthGet = "health.get";
+        public const string HealthTreat = "health.treat";
+        public const string HealthMedicine = "health.medicine";
+        public const string ClothingWear = "clothing.wear";
+        public const string ClothingTakeOff = "clothing.takeOff";
+        /// <summary>Dev: after dying, start again with a fresh body and the starter kit.</summary>
+        public const string NewSurvivor = "player.newSurvivor";
 
         // Server → client
         public const string Welcome = "welcome";
@@ -36,6 +44,7 @@ namespace ZombieMap.Core.Protocol
         public const string Building = "building";
         public const string Inventory = "inventory";
         public const string Loot = "loot";
+        public const string Health = "health";
         public const string EncounterState = "encounter.state";
         public const string Error = "error";
     }
@@ -133,6 +142,18 @@ namespace ZombieMap.Core.Protocol
     }
 
     /// <summary>Phase 1: dropped items are gone. Later they land on the ground where you are.</summary>
+    public sealed class HealthTreatRequest
+    {
+        public int WoundId;
+        public TreatAction Action;
+    }
+
+    /// <summary>Take one dose from a stack (antibiotics), or wear / take off a piece of clothing.</summary>
+    public sealed class StackRequest
+    {
+        public string StackId;
+    }
+
     public sealed class InventoryDropRequest
     {
         public string StackId;
@@ -185,6 +206,15 @@ namespace ZombieMap.Core.Protocol
         public PlayerInventory Inventory;
     }
 
+    /// <summary>The body (as the client may see it) and the inventory, after any change.</summary>
+    public sealed class HealthMessage
+    {
+        public BodyView Body;
+        public PlayerInventory Inventory;
+        /// <summary>Server clock (unix seconds), for showing how dirty bandages are.</summary>
+        public long Now;
+    }
+
     public enum SearchStatus { Searching, Done }
 
     /// <summary>Reply to loot.search/take/put: the container's state and your inventory after the change.</summary>
@@ -214,6 +244,6 @@ namespace ZombieMap.Core.Protocol
 
     public static class ProtocolInfo
     {
-        public const int Version = 3;
+        public const int Version = 4;
     }
 }

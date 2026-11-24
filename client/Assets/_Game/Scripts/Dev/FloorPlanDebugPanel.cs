@@ -17,7 +17,7 @@ namespace ZombieMap.Client.Dev
     public sealed class FloorPlanDebugPanel
     {
         private readonly GameClient _client;
-        private readonly LootSession _loot;
+        private readonly PlayerSession _loot;
         private FloorPlan _plan;
         private Vector2 _infoScroll;
         private Room _selected;
@@ -29,7 +29,7 @@ namespace ZombieMap.Client.Dev
 
         private static readonly string[] Shapes = { "Rectangle 12×9", "L-shape", "Wide 22×14", "Long 40×12" };
 
-        public FloorPlanDebugPanel(GameClient client, LootSession loot)
+        public FloorPlanDebugPanel(GameClient client, PlayerSession loot)
         {
             _client = client;
             _loot = loot;

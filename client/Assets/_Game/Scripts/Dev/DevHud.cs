@@ -16,8 +16,9 @@ namespace ZombieMap.Client.Dev
         private const float SwipeThresholdPixels = 80f;
         private const float ToolbarHeight = 40f;
 
-        private const int MapTab = 0, EncounterTab = 1, BuildingTab = 2, InventoryTab = 3;
-        private static readonly string[] Tabs = { "Map", "Encounter", "Building", "Inventory" };
+        private const int MapTab = 0, EncounterTab = 1, BuildingTab = 2, InventoryTab = 3, HealthTab = 4;
+        private static readonly string[] Tabs = { "Map", "Encounter", "Building", "Inventory", "Health" };
+        private const float HealthRefreshSeconds = 15f;
 
         private GameClient _client;
         private MapView _mapView;
@@ -25,7 +26,10 @@ namespace ZombieMap.Client.Dev
         private EncounterDebugPanel _encounter;
         private FloorPlanDebugPanel _floorPlan;
         private InventoryDebugPanel _inventory;
-        private LootSession _loot;
+        private HealthDebugPanel _health;
+        private int _lastTab = -1;
+        private float _nextHealthRefresh;
+        private PlayerSession _loot;
         private int _tab;
         private float _scale = 1f;
         private Vector2? _touchStart;
@@ -38,9 +42,10 @@ namespace ZombieMap.Client.Dev
             _encounter = new EncounterDebugPanel(_client);
             // Loot requests carry the player's position for the server's range check. Without a
             // map/GPS fix, (0,0) is sent: fine for hand-made dev buildings, too far for real ones.
-            _loot = new LootSession(_client, () => _mapView != null && _mapView.Location.HasFix ? _mapView.Location.Position : default);
+            _loot = new PlayerSession(_client, () => _mapView != null && _mapView.Location.HasFix ? _mapView.Location.Position : default);
             _floorPlan = new FloorPlanDebugPanel(_client, _loot);
             _inventory = new InventoryDebugPanel(_loot);
+            _health = new HealthDebugPanel(_loot);
             _map = new MapDebugPanel(_client, _mapView,
                 openPlan: (plan, building) =>
                 {
@@ -66,6 +71,20 @@ namespace ZombieMap.Client.Dev
         {
             _encounter.Tick();
             _loot.Tick();
+
+            if (_tab != _lastTab)
+            {
+                _health.SetVisible(_tab == HealthTab);
+                // The body changes on the server (fights, bleeding, healing): fetch it when you look.
+                if ((_tab == HealthTab || _tab == InventoryTab) && _client.IsConnected) _ = _loot.RefreshHealth();
+                _lastTab = _tab;
+                _nextHealthRefresh = Time.unscaledTime + HealthRefreshSeconds;
+            }
+            else if (_tab == HealthTab && _client.IsConnected && Time.unscaledTime > _nextHealthRefresh)
+            {
+                _ = _loot.RefreshHealth();
+                _nextHealthRefresh = Time.unscaledTime + HealthRefreshSeconds;
+            }
             if (_mapView != null)
             {
                 _mapView.PointerEnabled = _tab == MapTab;
@@ -99,11 +118,11 @@ namespace ZombieMap.Client.Dev
             float w = Screen.width / _scale, h = Screen.height / _scale;
 
             // Panels other than the map sit on a dark backdrop so the map doesn't show through.
-            if (_tab != MapTab) GUI.DrawTexture(new Rect(0, 0, w, h), _backdrop);
+            if (_tab != MapTab && _tab != HealthTab) GUI.DrawTexture(new Rect(0, 0, w, h), _backdrop);
 
             GUILayout.BeginArea(new Rect(8, 6, w - 16, 30), GUI.skin.box);
             GUILayout.BeginHorizontal();
-            _tab = GUILayout.Toolbar(_tab, Tabs, GUILayout.Width(360));
+            _tab = GUILayout.Toolbar(_tab, Tabs, GUILayout.Width(430));
             GUILayout.Space(12);
             GUI.enabled = !_client.IsConnecting;
             _client.ServerUrl = GUILayout.TextField(_client.ServerUrl, GUILayout.Width(200));
@@ -119,13 +138,14 @@ namespace ZombieMap.Client.Dev
                 case MapTab: _map.OnGUI(content); break;
                 case EncounterTab: _encounter.OnGUI(content); break;
                 case BuildingTab: _floorPlan.OnGUI(content); break;
-                default: _inventory.OnGUI(content); break;
+                case InventoryTab: _inventory.OnGUI(content); break;
+                default: _health.OnGUI(content, _scale); break;
             }
         }
 
         // ---------- hooks for the play-mode test ----------
 
-        public LootSession Loot => _loot;
+        public PlayerSession Loot => _loot;
 
         public void ShowBuilding(ZombieMap.Core.Buildings.FloorPlan plan, string title, ZombieMap.Core.Buildings.Room room)
         {
@@ -135,6 +155,8 @@ namespace ZombieMap.Client.Dev
         }
 
         public void ShowInventory() => _tab = InventoryTab;
+
+        public void ShowHealth() => _tab = HealthTab;
 
         private void OnDestroy()
         {

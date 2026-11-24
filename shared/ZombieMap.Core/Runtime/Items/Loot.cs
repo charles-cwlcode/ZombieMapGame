@@ -165,7 +165,7 @@ namespace ZombieMap.Core.Items
 
         private static readonly LootTable Wardrobe = Table(1, 3, 0.15,
             E("clothing.tshirt", 4), E("clothing.hoodie", 3), E("clothing.jeans", 3), E("clothing.leather_jacket", 1),
-            E("bag.school", 2), E("bag.duffel", 1), E("bag.tote", 2), E("bag.hiking", 0.4), E("mat.sheet", 2));
+            E("bag.school", 2), E("bag.duffel", 1), E("bag.tote", 2), E("bag.hiking", 0.4), E("mat.sheet", 2), E("clothing.scarf", 1.5), E("clothing.gloves", 1));
 
         private static readonly LootTable Drawers = Table(0, 3, 0.25,
             E("clothing.tshirt", 3), E("clothing.gloves", 1), E("mat.sheet", 2), E("tool.batteries", 2, 1, 4), E("tool.torch", 1),

@@ -75,7 +75,10 @@ in, what's wrong with your body.
 - **Item state:** count (stacks of small items), condition (weapons and clothing), uses left
   (disinfectant, painkillers, lighter), and a fresh-until day (food). Dropped items are destroyed
   for now; later they land on the ground.
-- **New players start with:** 2 rags, a bandage, a bottle of water and a chocolate bar.
+- **New players start with:** 2 rags, a bandage, a bottle of water and a chocolate bar, wearing a
+  T-shirt and jeans.
+- **Clothing** is worn in slots (head, neck, torso, jacket, hands, legs, feet) and counts towards
+  the weight you carry.
 - **Item list:** about 60 items, kept in code (`ItemCatalog`). Their IDs are saved in
   inventories, so never rename one.
 
@@ -109,14 +112,34 @@ in, what's wrong with your body.
 - Hold an action to preview where zombies will be when it finishes (`EncounterPreview`).
 - All tuning numbers live in `shared/ZombieMap.Core/Runtime/Encounters/Rules.cs`.
 
-### Equipment and health (planned, phase 1)
-- Equipment: both hands, back (done), belt and holster attachments, layered clothing.
-- Items have state: condition, freshness, partial uses, wet or dry.
-- 17 body zones. Clothing has per-zone coverage, bite and scratch protection, insulation and
-  condition. Attacks check layers from the outside in; layers can tear.
-  The Character_Gen_POC layered clothing (Underwear/Base/Mid/Outer/Overcoat) is the visual side of this.
-- Health screen: front and back body diagram. Bandages get dirty over time.
-  Antibiotics cure wound infection; nothing cures the zombie virus.
+### Health and body (phase 1: first cut done)
+- **One body per survivor, kept on the server** (`BodyState`, rules in `BodyRules`). Wounds from an
+  encounter come home with you: blood, endurance and every wound carry over between fights.
+- **Real time, but only while you play:** harm (bleeding, bandages getting dirty, infection) only
+  counts online time. A gap of more than 2 minutes between updates counts as offline. Healing
+  counts all time, so logging off never kills you but does let you recover.
+- **Wounds:** scratches stop bleeding by themselves after 3 minutes; lacerations and bites bleed
+  until bandaged (1 blood every 20 s). Healing takes 2 h (scratch), 12 h (laceration, 6 h if
+  stitched) or 24 h (bite). Blood comes back at 1 point per 3 minutes, endurance 1 point per 6 s.
+- **Treatment out of combat** with your own supplies: rag or bandage (a rag gets dirty after 2 h,
+  a bandage after 8 h), disinfect, stitch (needle and thread), remove a bandage. Dirty bandages and
+  undisinfected wounds turn infected after 45 minutes online. Antibiotics cure wound infection for
+  12 h of cover; nothing cures the zombie virus.
+- **Encounters use the real body and bag:** a fight starts with your current blood, endurance and
+  wounds, heals use the rags and bandages you actually carry, and what you used is taken away.
+- **Clothing** has a slot, the zones it covers, scratch and bite defence, a layer and a condition.
+  Attacks check the outer layer first (a jacket before a T-shirt); defence is scaled by condition.
+  A block wears the clothing by 8%, a hit by 4%. New survivors wear a T-shirt and jeans.
+- **Death:** bleeding out kills you. A dead survivor can't search or fight; **New survivor** starts
+  over with the starter kit. (How harsh death is long term is still open.)
+- **Health screen:** a CC character split into the 17 zones by its skeleton (each vertex goes to the
+  bone that moves it most). The body is a plain grey mannequin; each zone has a flat 2D shape over
+  it, green (fine), amber (treated), red (needs attention, pulses while bleeding) or black (bitten).
+  Callout boxes show each wound with its treatment buttons. Drag or Q/E to turn, tap a zone for
+  details.
+- **Still to come:** both hands, belt and holster attachments, wet or dry items, insulation, torn
+  layers, splints and glass, and the Character_Gen_POC layered clothing
+  (Underwear/Base/Mid/Outer/Overcoat) as the visual side.
 
 ### Special buildings, events, bases (phase 3+)
 - Special buildings work like gyms with survival stakes: clear, hold, supply; control decays.
@@ -158,7 +181,8 @@ client/  Unity 6000.5 (URP) ──WebSocket JSON──▶ server/ZombieMap.Serve
    building types). ✅ Mapbox v3 map in Unity with keyboard GPS simulation and tap-a-building.
    ⬜ Mapbox v3 on a phone (real GPS). ⬜ CC5 character performance on a mid-range phone.
 1. **Vertical slice.** ✅ Walk the map, loot a house room by room, weight-based inventory.
-   ⬜ Wounds and clothing check, healing with your own supplies, eating, sleeping at a safehouse, dying.
+   ✅ Wounds and clothing check, healing with your own supplies, dying.
+   ⬜ Eating and drinking, sleeping at a safehouse.
 2. Zombies and hordes on the map, noise, infection, spoilage, crafting, real weather,
    the AI item pipeline.
 3. Special buildings, events, factions, remote raids.

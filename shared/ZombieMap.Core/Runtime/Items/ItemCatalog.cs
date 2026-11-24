@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ZombieMap.Core.Health;
 
 namespace ZombieMap.Core.Items
 {
@@ -82,14 +83,15 @@ namespace ZombieMap.Core.Items
             Bag("bag.duffel", "Duffel bag", 0.9, capacity: 16, reduction: 0.4, back: true);
             Bag("bag.hiking", "Hiking backpack", 1.2, capacity: 20, reduction: 0.6, back: true);
 
-            // ---- clothing (protection data comes with the health milestone) ----
-            Clothing("clothing.tshirt", "T-shirt", 0.2);
-            Clothing("clothing.hoodie", "Hoodie", 0.6);
-            Clothing("clothing.jeans", "Jeans", 0.8);
-            Clothing("clothing.leather_jacket", "Leather jacket", 1.6);
-            Clothing("clothing.work_boots", "Work boots", 1.4);
-            Clothing("clothing.gloves", "Work gloves", 0.15);
-            Clothing("clothing.bike_helmet", "Bike helmet", 0.35);
+            // ---- clothing: slot, zones covered, scratch / bite defence at full condition ----
+            Clothing("clothing.tshirt", "T-shirt", 0.2, ClothingSlot.Torso, 0.10, 0.02, Torso, UpperArms);
+            Clothing("clothing.hoodie", "Hoodie", 0.6, ClothingSlot.Jacket, 0.30, 0.08, Torso, UpperArms, Forearms);
+            Clothing("clothing.leather_jacket", "Leather jacket", 1.6, ClothingSlot.Jacket, 0.65, 0.35, Torso, UpperArms, Forearms);
+            Clothing("clothing.jeans", "Jeans", 0.8, ClothingSlot.Legs, 0.35, 0.12, Legs);
+            Clothing("clothing.work_boots", "Work boots", 1.4, ClothingSlot.Feet, 0.90, 0.70, Feet);
+            Clothing("clothing.gloves", "Work gloves", 0.15, ClothingSlot.Hands, 0.55, 0.25, Hands);
+            Clothing("clothing.bike_helmet", "Bike helmet", 0.35, ClothingSlot.Head, 0.60, 0.50, new[] { BodyPart.Head });
+            Clothing("clothing.scarf", "Thick scarf", 0.25, ClothingSlot.Neck, 0.40, 0.20, new[] { BodyPart.Neck });
 
             // ---- materials ----
             Add(new ItemDefinition { Id = "mat.sheet", Name = "Bed sheet", Category = ItemCategory.Material, Weight = 0.6 });
@@ -118,7 +120,22 @@ namespace ZombieMap.Core.Items
         private static void Bag(string id, string name, double weight, double capacity, double reduction, bool back) =>
             Add(new ItemDefinition { Id = id, Name = name, Category = ItemCategory.Bag, Weight = weight, Capacity = capacity, WeightReduction = reduction, WornOnBack = back });
 
-        private static void Clothing(string id, string name, double weight) =>
-            Add(new ItemDefinition { Id = id, Name = name, Category = ItemCategory.Clothing, Weight = weight });
+        private static readonly BodyPart[] Torso = { BodyPart.UpperTorso, BodyPart.LowerTorso };
+        private static readonly BodyPart[] UpperArms = { BodyPart.LeftUpperArm, BodyPart.RightUpperArm };
+        private static readonly BodyPart[] Forearms = { BodyPart.LeftForearm, BodyPart.RightForearm };
+        private static readonly BodyPart[] Hands = { BodyPart.LeftHand, BodyPart.RightHand };
+        private static readonly BodyPart[] Legs = { BodyPart.Groin, BodyPart.LeftThigh, BodyPart.RightThigh, BodyPart.LeftShin, BodyPart.RightShin };
+        private static readonly BodyPart[] Feet = { BodyPart.LeftFoot, BodyPart.RightFoot };
+
+        private static void Clothing(string id, string name, double weight, ClothingSlot slot, double scratch, double bite, params BodyPart[][] covers)
+        {
+            var zones = new List<BodyPart>();
+            foreach (var group in covers) zones.AddRange(group);
+            Add(new ItemDefinition
+            {
+                Id = id, Name = name, Category = ItemCategory.Clothing, Weight = weight,
+                Slot = slot, Covers = zones.ToArray(), ScratchDefense = scratch, BiteDefense = bite,
+            });
+        }
     }
 }

@@ -311,7 +311,10 @@ namespace ZombieMap.Client.Dev
             s.Endurance = _view.Endurance;
             s.Blood = _view.Blood;
             s.Facing = _view.Facing;
-            s.Wounds = _view.Wounds.Select(w => new Wound { Part = w.Part, Kind = w.Kind, Bleeding = w.Bleeding, Treatment = w.Treatment }).ToList();
+            s.Wounds = _view.Wounds.Select(w => new Wound
+            {
+                Part = w.Part, Kind = w.Kind, Bleeding = w.Bleeding, Bandage = w.Bandage, Disinfected = w.Disinfected,
+            }).ToList();
             return s;
         }
     }

@@ -44,4 +44,14 @@ public sealed class EncounterGrain(
         }
         return result;
     }
+
+    /// <summary>The survivor's true final state (wounds with virus truth, supplies left, clothing condition).</summary>
+    public Task<Survivor> Outcome(string ownerId)
+    {
+        var encounter = state.State.Encounter
+                        ?? throw new GameRuleException("no_such_encounter", "That encounter doesn't exist.");
+        if (state.State.OwnerId != ownerId)
+            throw new GameRuleException("not_yours", "That isn't your encounter.");
+        return Task.FromResult(encounter.Survivor);
+    }
 }

@@ -4,17 +4,18 @@ using System.Threading.Tasks;
 using UnityEngine;
 using ZombieMap.Client.Net;
 using ZombieMap.Core.Geo;
+using ZombieMap.Core.Health;
 using ZombieMap.Core.Items;
 using ZombieMap.Core.Protocol;
 
 namespace ZombieMap.Client.Dev
 {
     /// <summary>
-    /// Client-side state for looting: the player's inventory, the containers searched in the current
-    /// building, and searches in progress. Every change goes through the server; this only mirrors
-    /// what the server last said. Shared by the Building and Inventory tabs.
+    /// Client-side mirror of the player: inventory, body, the containers searched in the current
+    /// building and searches in progress. Every change goes through the server; this only shows what
+    /// the server last said. Shared by the Building, Inventory and Health tabs.
     /// </summary>
-    public sealed class LootSession
+    public sealed class PlayerSession
     {
         public sealed class ContainerState
         {
@@ -30,17 +31,21 @@ namespace ZombieMap.Client.Dev
         private readonly Dictionary<string, ContainerState> _containers = new Dictionary<string, ContainerState>();
 
         public PlayerInventory Inventory { get; private set; }
+        public BodyView Body { get; private set; }
+        /// <summary>Server clock (unix seconds) when <see cref="Body"/> was sent.</summary>
+        public long BodyTime { get; private set; }
+        public event Action BodyChanged;
         public string BuildingId { get; private set; }
         /// <summary>The container the player last opened (for "Put" in the Inventory tab).</summary>
         public string OpenContainerId { get; private set; }
         public string Message { get; private set; } = "";
         public bool Busy { get; private set; }
 
-        public LootSession(GameClient client, Func<LatLng> position)
+        public PlayerSession(GameClient client, Func<LatLng> position)
         {
             _client = client;
             _position = position;
-            _client.Welcomed += welcome => { _containers.Clear(); _ = RefreshInventory(); };
+            _client.Welcomed += welcome => { _containers.Clear(); _ = RefreshHealth(); };
         }
 
         public ItemContainer OpenContainer =>
@@ -68,6 +73,38 @@ namespace ZombieMap.Client.Dev
                 if (c.Status == SearchStatus.Searching && !c.Requesting && Time.unscaledTime >= c.FinishesAt)
                     _ = Search(pair.Key);
             }
+        }
+
+        // ---------- health and clothing ----------
+
+        public Task RefreshHealth() =>
+            Run(async () => ApplyHealth(await _client.Connection.RequestAsync<HealthMessage>(MessageTypes.HealthGet, new { })));
+
+        public Task Treat(int woundId, TreatAction action) =>
+            Run(async () => ApplyHealth(await _client.Connection.RequestAsync<HealthMessage>(MessageTypes.HealthTreat,
+                new HealthTreatRequest { WoundId = woundId, Action = action })));
+
+        public Task TakeMedicine(string stackId) =>
+            Run(async () => ApplyHealth(await _client.Connection.RequestAsync<HealthMessage>(MessageTypes.HealthMedicine,
+                new StackRequest { StackId = stackId })));
+
+        public Task Wear(string stackId) =>
+            Run(async () => ApplyHealth(await _client.Connection.RequestAsync<HealthMessage>(MessageTypes.ClothingWear,
+                new StackRequest { StackId = stackId })));
+
+        public Task TakeOff(string stackId) =>
+            Run(async () => ApplyHealth(await _client.Connection.RequestAsync<HealthMessage>(MessageTypes.ClothingTakeOff,
+                new StackRequest { StackId = stackId })));
+
+        public Task NewSurvivor() =>
+            Run(async () => ApplyHealth(await _client.Connection.RequestAsync<HealthMessage>(MessageTypes.NewSurvivor, new { })));
+
+        private void ApplyHealth(HealthMessage m)
+        {
+            Inventory = m.Inventory;
+            Body = m.Body;
+            BodyTime = m.Now;
+            BodyChanged?.Invoke();
         }
 
         public async Task RefreshInventory()

@@ -1,5 +1,6 @@
 using ZombieMap.Core.Buildings;
 using ZombieMap.Core.Encounters;
+using ZombieMap.Core.Health;
 using ZombieMap.Core.Items;
 using ZombieMap.Core.Protocol;
 
@@ -25,6 +26,14 @@ public interface IPlayerGrain : IGrainWithStringKey
     Task<LootMessage> Search(string buildingId, string containerId);
     Task<LootMessage> Take(string buildingId, string containerId, string stackId, int count, string to);
     Task<LootMessage> Put(string buildingId, string containerId, string stackId, int count);
+
+    // Health and clothing.
+    Task<HealthMessage> GetHealth();
+    Task<HealthMessage> Treat(int woundId, TreatAction action);
+    Task<HealthMessage> TakeMedicine(string stackId);
+    Task<HealthMessage> Wear(string stackId);
+    Task<HealthMessage> TakeOff(string stackId);
+    Task<HealthMessage> NewSurvivor();
 }
 
 /// <summary>One player's loot in one building, keyed "{playerId}|{buildingId}". Only that PlayerGrain calls it.</summary>
@@ -41,6 +50,7 @@ public interface IEncounterGrain : IGrainWithStringKey
 {
     Task<EncounterResult> Start(string ownerId, EncounterConfig config);
     Task<EncounterResult> Act(string ownerId, EncounterAction action);
+    Task<Survivor> Outcome(string ownerId);
 }
 
 /// <summary>One per real-world building, keyed by its stable building ID.</summary>

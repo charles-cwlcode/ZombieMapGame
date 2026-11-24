@@ -1,5 +1,10 @@
+using ZombieMap.Core.Health;
+
 namespace ZombieMap.Core.Items
 {
+    /// <summary>Where a piece of clothing is worn. One item per slot.</summary>
+    public enum ClothingSlot { None, Head, Neck, Torso, Jacket, Hands, Legs, Feet }
+
     public enum ItemCategory { Food, Drink, Medical, Weapon, Tool, Clothing, Bag, Material }
 
     /// <summary>What a medical item does. Used by healing (encounters now, health screen later).</summary>
@@ -47,6 +52,18 @@ namespace ZombieMap.Core.Items
         public double WeightReduction;
         /// <summary>Can be worn on the back (frees the hands, gets the weight reduction).</summary>
         public bool WornOnBack;
+
+        // ---- clothing ----
+        public ClothingSlot Slot;
+        /// <summary>Body zones it protects.</summary>
+        public BodyPart[] Covers;
+        /// <summary>0..1 chance (at full condition) to stop a scratch or laceration on a covered zone.</summary>
+        public double ScratchDefense;
+        /// <summary>0..1 chance (at full condition) to stop a bite on a covered zone.</summary>
+        public double BiteDefense;
+        /// <summary>Outer layers (jackets) are hit first.</summary>
+        public int Layer => Slot == ClothingSlot.Jacket ? 2 : 1;
+        public bool IsClothing => Slot != ClothingSlot.None;
 
         public bool IsBag => Capacity > 0;
         public bool Spoils => FreshDays > 0;

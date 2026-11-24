@@ -189,6 +189,34 @@ public sealed partial class GameSocketHandler(
                 return (Inventory(env.Id, await grains.GetGrain<IPlayerGrain>(playerId).Drop(r.StackId, r.Count)), playerId);
             }
 
+            // ---------- health and clothing ----------
+
+            case MessageTypes.HealthGet:
+                return (ProtocolJson.Write(MessageTypes.Health, await grains.GetGrain<IPlayerGrain>(playerId).GetHealth(), env.Id), playerId);
+
+            case MessageTypes.HealthTreat:
+            {
+                var r = env.DataAs<HealthTreatRequest>();
+                if (r == null || r.WoundId <= 0) return (Error(env.Id, "bad_request", "Which wound?"), playerId);
+                return (ProtocolJson.Write(MessageTypes.Health, await grains.GetGrain<IPlayerGrain>(playerId).Treat(r.WoundId, r.Action), env.Id), playerId);
+            }
+
+            case MessageTypes.HealthMedicine:
+            case MessageTypes.ClothingWear:
+            case MessageTypes.ClothingTakeOff:
+            {
+                var r = env.DataAs<StackRequest>();
+                if (r == null || !ValidId(r.StackId)) return (Error(env.Id, "bad_request", "Missing item."), playerId);
+                var player = grains.GetGrain<IPlayerGrain>(playerId);
+                var reply = env.Type == MessageTypes.HealthMedicine ? await player.TakeMedicine(r.StackId)
+                    : env.Type == MessageTypes.ClothingWear ? await player.Wear(r.StackId)
+                    : await player.TakeOff(r.StackId);
+                return (ProtocolJson.Write(MessageTypes.Health, reply, env.Id), playerId);
+            }
+
+            case MessageTypes.NewSurvivor:
+                return (ProtocolJson.Write(MessageTypes.Health, await grains.GetGrain<IPlayerGrain>(playerId).NewSurvivor(), env.Id), playerId);
+
             // ---------- looting (loot range is checked here, on the server) ----------
 
             case MessageTypes.LootSearch:

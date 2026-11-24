@@ -1,4 +1,5 @@
 using ZombieMap.Core.Encounters;
+using ZombieMap.Core.Health;
 using ZombieMap.Core.Items;
 using ZombieMap.Core.Protocol;
 
@@ -12,6 +13,9 @@ public sealed class PlayerState
     [Id(2)] public string? ActiveEncounterId { get; set; }
     [Id(3)] public int EncountersStarted { get; set; }
     [Id(4)] public PlayerInventory? Inventory { get; set; }
+    [Id(5)] public BodyState? Body { get; set; }
+    /// <summary>Medical supplies the active encounter started with (to know what it used up).</summary>
+    [Id(6)] public Supplies? EncounterSupplies { get; set; }
 }
 
 public sealed class PlayerGrain(
@@ -37,15 +41,25 @@ public sealed class PlayerGrain(
 
     public async Task<EncounterStateMessage> StartEncounter(StartEncounterRequest request)
     {
+        var body = Body();
+        RequireAlive();
         // Phase 0: starting a new encounter abandons the old one. Later: resume it instead.
         state.State.EncountersStarted++;
         string encounterId = $"{this.GetPrimaryKeyString()}/{state.State.EncountersStarted}";
 
+        // You fight with the body, clothes and medical supplies you actually have.
+        var supplies = BodyRules.SuppliesFrom(Inv);
+        state.State.EncounterSupplies = supplies;
         var config = new EncounterConfig
         {
             Seed = (ulong)Random.Shared.NextInt64(),
             Arena = request.Arena,
             ZombieCount = Math.Clamp(request.ZombieCount, 1, MaxZombies),
+            StartSupplies = supplies,
+            StartBlood = body.Blood,
+            StartEndurance = body.Endurance,
+            StartWounds = body.Wounds,
+            Worn = Inv.Worn,
         };
         var result = await GrainFactory.GetGrain<IEncounterGrain>(encounterId).Start(this.GetPrimaryKeyString(), config);
 
@@ -63,7 +77,17 @@ public sealed class PlayerGrain(
 
         if (result.View.Status != EncounterStatus.Ongoing)
         {
-            // TODO(phase 1): copy wounds/supplies back to the player's persistent body + inventory.
+            // Bring the fight home: wounds, blood, endurance, supplies used, clothes worn down.
+            var survivor = await GrainFactory.GetGrain<IEncounterGrain>(encounterId).Outcome(this.GetPrimaryKeyString());
+            var body = Body();
+            BodyRules.ApplyEncounter(body, survivor, result.View.Status == EncounterStatus.Died, result.View.DeathCause, Now());
+            if (state.State.EncounterSupplies != null) BodyRules.ConsumeUsed(Inv, state.State.EncounterSupplies, survivor.Supplies);
+            foreach (var worn in Inv.Worn)
+            {
+                var after = survivor.Worn.Find(w => w.Id == worn.Id);
+                if (after != null) worn.Condition = after.Condition;
+            }
+            state.State.EncounterSupplies = null;
             state.State.ActiveEncounterId = null;
             await state.WriteStateAsync();
         }
@@ -87,6 +111,9 @@ public sealed class PlayerGrain(
         Give("med.bandage", 1);
         Give("drink.water_bottle");
         Give("food.chocolate");
+        // Dressed, but only just: a T-shirt and jeans barely stop anything.
+        inv.Worn.Add(new ItemStack { Id = inv.NewId(), ItemId = "clothing.tshirt" });
+        inv.Worn.Add(new ItemStack { Id = inv.NewId(), ItemId = "clothing.jeans" });
         return inv;
     }
 
@@ -131,6 +158,7 @@ public sealed class PlayerGrain(
 
     public async Task<LootMessage> Search(string buildingId, string containerId)
     {
+        RequireAlive();
         var reply = await Loot(buildingId).Search(containerId);
         reply.Inventory = Inv;
         return reply;
@@ -138,6 +166,7 @@ public sealed class PlayerGrain(
 
     public async Task<LootMessage> Take(string buildingId, string containerId, string stackId, int count, string to)
     {
+        RequireAlive();
         var loot = Loot(buildingId);
         var target = Inv.Container(to) ?? throw new GameRuleException("bad_target", "Put it in your pockets or a bag on your back.");
 
@@ -186,6 +215,77 @@ public sealed class PlayerGrain(
             BuildingId = buildingId, ContainerId = containerId, Status = SearchStatus.Done,
             Contents = await loot.Get(containerId), Inventory = Inv,
         };
+    }
+
+    // ------------------------------------------------------------------ health and clothing
+
+    private static long Now() => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+    /// <summary>The body, moved forward to now (bleeding, infection, healing since the last request).</summary>
+    private BodyState Body()
+    {
+        state.State.Body ??= new BodyState { LastUpdated = Now() };
+        BodyRules.Advance(state.State.Body, Now());
+        return state.State.Body;
+    }
+
+    private void RequireAlive()
+    {
+        var body = Body();
+        if (body.Dead) throw new GameRuleException("dead", $"You're dead ({body.DeathCause}). Start a new survivor.");
+    }
+
+    private HealthMessage Health()
+    {
+        long now = Now();
+        return new HealthMessage { Body = BodyRules.ToView(Body(), now), Inventory = Inv, Now = now };
+    }
+
+    public Task<HealthMessage> GetHealth() => Task.FromResult(Health());
+
+    public async Task<HealthMessage> Treat(int woundId, TreatAction action)
+    {
+        if (state.State.ActiveEncounterId != null) throw new GameRuleException("in_encounter", "Finish the fight first.");
+        var error = BodyRules.Treat(Body(), Inv, woundId, action, Now());
+        if (error != null) throw new GameRuleException("treat", error);
+        await state.WriteStateAsync();
+        return Health();
+    }
+
+    public async Task<HealthMessage> TakeMedicine(string stackId)
+    {
+        var error = BodyRules.TakeMedicine(Body(), Inv, stackId, Now());
+        if (error != null) throw new GameRuleException("medicine", error);
+        await state.WriteStateAsync();
+        return Health();
+    }
+
+    public async Task<HealthMessage> Wear(string stackId)
+    {
+        if (state.State.ActiveEncounterId != null) throw new GameRuleException("in_encounter", "No time to change clothes.");
+        Check(InventoryRules.Wear(Inv, stackId));
+        await state.WriteStateAsync();
+        return Health();
+    }
+
+    public async Task<HealthMessage> TakeOff(string stackId)
+    {
+        if (state.State.ActiveEncounterId != null) throw new GameRuleException("in_encounter", "No time to change clothes.");
+        Check(InventoryRules.TakeOff(Inv, stackId));
+        await state.WriteStateAsync();
+        return Health();
+    }
+
+    public async Task<HealthMessage> NewSurvivor()
+    {
+        // Placeholder until we decide how harsh death is: everything you carried is gone.
+        if (!Body().Dead) throw new GameRuleException("not_dead", "You're still alive.");
+        state.State.Body = new BodyState { LastUpdated = Now() };
+        state.State.Inventory = StarterInventory();
+        state.State.ActiveEncounterId = null;
+        state.State.EncounterSupplies = null;
+        await state.WriteStateAsync();
+        return Health();
     }
 
     private static GameRuleException Missing() => new("no_such_item", "You don't have that.");

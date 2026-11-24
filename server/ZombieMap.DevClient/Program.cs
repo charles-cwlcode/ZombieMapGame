@@ -9,6 +9,7 @@ using System.Text;
 using ZombieMap.Core.Buildings;
 using ZombieMap.Core.Encounters;
 using ZombieMap.Core.Geo;
+using ZombieMap.Core.Health;
 using ZombieMap.Core.Items;
 using ZombieMap.Core.Protocol;
 
@@ -92,6 +93,11 @@ else
 }
 
 // 4. Encounter with a simple bot that only uses what the client can see.
+var healthBefore = (await Request(MessageTypes.HealthGet, new { })).DataAs<HealthMessage>();
+Console.WriteLine($"\nBody: blood {healthBefore.Body.Blood}, {healthBefore.Body.Wounds.Count} wounds; wearing {string.Join(", ", healthBefore.Inventory.Worn.Select(w => w.Def().Name))}");
+Check(!healthBefore.Body.Dead && healthBefore.Inventory.Worn.Count == 2, "new survivor is alive and dressed");
+var startSupplies = BodyRulesSupplies(healthBefore.Inventory);
+
 var state = (await Request(MessageTypes.StartEncounter, new StartEncounterRequest { Arena = ArenaKind.Field, ZombieCount = 4 }))
     .DataAs<EncounterStateMessage>();
 Console.WriteLine($"\nEncounter {state.EncounterId} started: {state.Result.View.ZombiesRemaining} zombies");
@@ -119,6 +125,50 @@ Check(view.Status != EncounterStatus.Ongoing, "encounter reached an end state");
 // 5. Error path: acting on an encounter that isn't active.
 var err = await Request(MessageTypes.EncounterAct, new EncounterActRequest { EncounterId = state.EncounterId, Action = EncounterAction.Of(EncounterActionKind.Wait) });
 Check(err.Type == MessageTypes.Error && err.DataAs<ErrorMessage>().Code == "no_such_encounter", "finished encounter rejects further actions");
+
+// 6. The fight came home with you.
+Check(state.Result.View.Supplies.Rags == startSupplies.Rags && state.Result.View.Supplies.Bandages == startSupplies.Bandages,
+    $"encounter started with the inventory's supplies ({startSupplies.Rags} rags, {startSupplies.Bandages} bandage)");
+var after = (await Request(MessageTypes.HealthGet, new { })).DataAs<HealthMessage>();
+var leftSupplies = BodyRulesSupplies(after.Inventory);
+Check(leftSupplies.Rags == view.Supplies.Rags && leftSupplies.Bandages == view.Supplies.Bandages,
+    $"supplies used in the fight are gone from the inventory ({leftSupplies.Rags} rags, {leftSupplies.Bandages} bandages left)");
+Check(after.Body.Dead == (view.Status == EncounterStatus.Died), $"body is {(after.Body.Dead ? "dead" : "alive")} like the encounter said");
+Check(after.Body.Wounds.Count == view.Wounds.Count && after.Body.Wounds.All(w => w.Id > 0), $"{after.Body.Wounds.Count} wounds carried over, all with IDs");
+Console.WriteLine($"  Body after: blood {after.Body.Blood}, " + string.Join("; ", after.Body.Wounds.Select(w => $"{w.Kind} {w.Part} {(w.Bleeding ? "bleeding" : w.Treatment.ToString())}")));
+Console.WriteLine($"  Clothes after: {string.Join(", ", after.Inventory.Worn.Select(w => $"{w.Def().Name} {w.Condition:P0}"))}");
+
+if (after.Body.Dead)
+{
+    var blocked = await Request(MessageTypes.StartEncounter, new StartEncounterRequest(), allowError: true);
+    Check(blocked.Type == MessageTypes.Error && blocked.DataAs<ErrorMessage>().Code == "dead", "dead survivors can't start another fight");
+    after = (await Request(MessageTypes.NewSurvivor, new { })).DataAs<HealthMessage>();
+    Check(!after.Body.Dead && after.Body.Wounds.Count == 0 && after.Inventory.Worn.Count == 2, "new survivor starts fresh");
+}
+
+// 7. Treat a wound out of combat (give ourselves one if the fight left none).
+var wound = after.Body.Wounds.FirstOrDefault(w => w.Bandage == BandageKind.None);
+if (wound == null)
+{
+    Console.WriteLine("  (no open wound to treat; skipping treatment check)");
+}
+else
+{
+    int rags = BodyRulesSupplies(after.Inventory).Rags;
+    var action = rags > 0 ? TreatAction.BandageWithRag : TreatAction.BandageWithBandage;
+    var treated = await Request(MessageTypes.HealthTreat, new HealthTreatRequest { WoundId = wound.Id, Action = action }, allowError: true);
+    if (treated.Type == MessageTypes.Error)
+        Console.WriteLine($"  (couldn't bandage: {treated.DataAs<ErrorMessage>().Message})");
+    else
+        Check(treated.DataAs<HealthMessage>().Body.Wounds.Single(w => w.Id == wound.Id).Bandage != BandageKind.None, $"bandaged the {wound.Kind.ToString().ToLowerInvariant()} on the {wound.Part}");
+}
+
+// 8. Clothes come off and go back on.
+var shirt = after.Inventory.Worn.First(w => w.ItemId == "clothing.tshirt");
+var off = (await Request(MessageTypes.ClothingTakeOff, new StackRequest { StackId = shirt.Id })).DataAs<HealthMessage>();
+Check(off.Inventory.Main.Find(shirt.Id) != null && off.Inventory.Worn.All(w => w.Id != shirt.Id), "took the T-shirt off into pockets");
+var on = (await Request(MessageTypes.ClothingWear, new StackRequest { StackId = shirt.Id })).DataAs<HealthMessage>();
+Check(on.Inventory.Worn.Any(w => w.Id == shirt.Id), "put it back on");
 
 await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
 Console.WriteLine(failures == 0 ? "\nSMOKE TEST PASSED" : $"\nSMOKE TEST FAILED ({failures})");
@@ -171,6 +221,8 @@ async Task<Envelope> Request(string type, object data, bool allowError = false)
         throw new InvalidOperationException($"Server error: {envelope.Data}");
     return envelope;
 }
+
+static Supplies BodyRulesSupplies(PlayerInventory inv) => BodyRules.SuppliesFrom(inv);
 
 void Check(bool ok, string what)
 {

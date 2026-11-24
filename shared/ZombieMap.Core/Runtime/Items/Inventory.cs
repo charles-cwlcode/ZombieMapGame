@@ -63,6 +63,9 @@ namespace ZombieMap.Core.Items
         /// <summary>The bag on your back, or null. Its Contents has Id <see cref="BackId"/>.</summary>
         public ItemStack Back;
 
+        /// <summary>Clothes being worn, one per <see cref="ClothingSlot"/>.</summary>
+        public List<ItemStack> Worn = new List<ItemStack>();
+
         /// <summary>Counter for item IDs given out by this inventory ("i1", "i2"…).</summary>
         public int NextId;
 
@@ -76,7 +79,15 @@ namespace ZombieMap.Core.Items
             return null;
         }
 
-        public double CarriedWeight => InventoryRules.Used(Main) + (Back == null ? 0 : InventoryRules.WornWeight(Back));
+        public double CarriedWeight
+        {
+            get
+            {
+                double w = InventoryRules.Used(Main) + (Back == null ? 0 : InventoryRules.WornWeight(Back));
+                foreach (var c in Worn) w += InventoryRules.Weight(c);
+                return w;
+            }
+        }
 
         public bool HeavyLoad => CarriedWeight > InventoryRules.CarryLimit;
 
@@ -239,6 +250,79 @@ namespace ZombieMap.Core.Items
             inv.Main.Items.Add(bag);
             return null;
         }
+
+        /// <summary>Puts on a piece of clothing from your pockets or bag. Whatever was in that slot goes to your pockets.</summary>
+        public static string Wear(PlayerInventory inv, string stackId)
+        {
+            if (!inv.TryFind(stackId, out var from, out var item)) return "Pick it up first.";
+            var def = item.Def();
+            if (!def.IsClothing) return def.Name + " isn't something you can wear.";
+
+            from.Items.Remove(item);
+            var old = inv.Worn.Find(w => w.Def().Slot == def.Slot);
+            if (old != null)
+            {
+                if (Weight(old) > Free(inv.Main) + Epsilon)
+                {
+                    from.Items.Add(item);
+                    return $"No room in your pockets for the {old.Def().Name.ToLowerInvariant()} you'd take off.";
+                }
+                inv.Worn.Remove(old);
+                inv.Main.Items.Add(old);
+            }
+            inv.Worn.Add(item);
+            return null;
+        }
+
+        /// <summary>Takes off a piece of clothing into your pockets.</summary>
+        public static string TakeOff(PlayerInventory inv, string stackId)
+        {
+            var item = inv.Worn.Find(w => w.Id == stackId);
+            if (item == null) return "You're not wearing that.";
+            if (Weight(item) > Free(inv.Main) + Epsilon) return "No room in your pockets.";
+            inv.Worn.Remove(item);
+            inv.Main.Items.Add(item);
+            return null;
+        }
+
+        /// <summary>
+        /// Uses up <paramref name="amount"/> of something (counting stack sizes, or uses for items
+        /// that have uses), taking from the smallest stacks first. Returns false (and changes
+        /// nothing) if there isn't enough.
+        /// </summary>
+        public static bool Consume(PlayerInventory inv, Func<ItemDefinition, bool> match, int amount)
+        {
+            if (amount <= 0) return true;
+            var found = new List<(ItemContainer c, ItemStack s)>();
+            int available = 0;
+            foreach (var c in new[] { inv.Main, inv.Back?.Contents })
+            {
+                if (c == null) continue;
+                foreach (var s in c.Items)
+                {
+                    var def = s.Def();
+                    if (!match(def)) continue;
+                    found.Add((c, s));
+                    available += def.Uses > 0 ? s.UsesLeft : s.Count;
+                }
+            }
+            if (available < amount) return false;
+
+            found.Sort((a, b) => Units(a.s).CompareTo(Units(b.s)));
+            foreach (var (c, s) in found)
+            {
+                if (amount == 0) break;
+                int take = Math.Min(amount, Units(s));
+                if (s.Def().Uses > 0) s.UsesLeft -= take;
+                else s.Count -= take;
+                amount -= take;
+                if (Units(s) == 0) c.Items.Remove(s);
+            }
+            return true;
+        }
+
+        /// <summary>How many uses or items a stack holds.</summary>
+        public static int Units(ItemStack s) => s.Def().Uses > 0 ? s.UsesLeft : s.Count;
 
         /// <summary>Makes an empty bag item ready to hold things (called when bags are created).</summary>
         public static void InitBag(ItemStack stack)
