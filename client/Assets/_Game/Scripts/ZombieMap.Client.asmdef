@@ -3,7 +3,12 @@
     "rootNamespace": "ZombieMap.Client",
     "references": [
         "ZombieMap.Core",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "MapboxBaseModule",
+        "MapboxExamples",
+        "UnityMapModule",
+        "MapboxImageryModule",
+        "MapboxVectorModule"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

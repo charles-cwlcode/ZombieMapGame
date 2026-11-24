@@ -53,6 +53,15 @@ namespace ZombieMap.Client.Dev
             if (InFight && !_busy) Send(EncounterAction.Turn(steps));
         }
 
+        /// <summary>Dev: start (or restart) an encounter from elsewhere, e.g. the map's "Force encounter" buttons.</summary>
+        public void Force(ArenaKind arena, int zombieCount)
+        {
+            if (!_client.IsConnected || _busy) return;
+            _arena = arena;
+            _zombieCount = Mathf.Clamp(zombieCount, 1, 12);
+            StartEncounter();
+        }
+
         // ------------------------------------------------------------------ drawing
 
         public void OnGUI(Rect area)

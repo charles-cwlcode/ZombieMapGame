@@ -26,7 +26,11 @@ public interface IEncounterGrain : IGrainWithStringKey
 /// <summary>One per real-world building, keyed by its stable building ID.</summary>
 public interface IBuildingGrain : IGrainWithStringKey
 {
-    Task<FloorPlan> GetFloorPlan(BuildingFootprint footprint);
+    /// <param name="devFootprint">
+    /// Dev only: used when the map data doesn't know this ID (hand-made test buildings).
+    /// Real buildings always use the server's own footprint.
+    /// </param>
+    Task<FloorPlan> GetFloorPlan(BuildingFootprint? devFootprint);
 }
 
 /// <summary>Thrown for player mistakes that should go back to the client as an error message.</summary>

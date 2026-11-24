@@ -1,0 +1,27 @@
+# Local development database. The server starts this itself in Development
+# (see server/ZombieMap.Server/World/DevDatabaseStartup.cs), so you normally don't run it by hand.
+#   docker compose up -d        start it manually
+#   docker compose down -v      stop it and delete all data (buildings re-import on next server start)
+name: zombiemap
+
+services:
+  postgis:
+    image: postgis/postgis:17-3.5
+    container_name: zombiemap-postgis
+    environment:
+      POSTGRES_USER: zombiemap
+      POSTGRES_PASSWORD: zombiemap   # dev only; the port is bound to localhost
+      POSTGRES_DB: zombiemap
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zombiemap -d zombiemap"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  pgdata:

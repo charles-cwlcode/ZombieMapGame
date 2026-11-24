@@ -5,7 +5,9 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using ZombieMap.Client.Dev;
+using ZombieMap.Client.Map;
 using ZombieMap.Client.Net;
+using Object = UnityEngine.Object;
 using ZombieMap.Core.Buildings;
 using ZombieMap.Core.Encounters;
 using ZombieMap.Core.Protocol;
@@ -21,19 +23,70 @@ namespace ZombieMap.Client.Editor
     {
         public const string DevScenePath = "Assets/_Game/Scenes/Dev.unity";
 
+        private const string MapboxRoot = "Packages/com.mapbox.sdk/Runtime/Mapbox/";
+        private const string TileMaterialPath = MapboxRoot + "BaseModule/Unity/Visuals/Materials/ElevatedTerrainMaterial.mat";
+        private const string BuildingLayerPath = MapboxRoot + "VectorModule/BasicVisualizers/Buildings/DefaultBuildingLayer.asset";
+        private const string PlayerMaterialPath = "Assets/_Game/Materials/PlayerMarker.mat";
+
         [MenuItem("ZombieMap/Create Dev Scene")]
         public static void CreateDevScene()
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
             var cam = Camera.main;
-            if (cam != null)
-            {
-                cam.clearFlags = CameraClearFlags.SolidColor;
-                cam.backgroundColor = new Color(0.08f, 0.09f, 0.1f);
-            }
+            cam.name = "MapCamera";
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = new Color(0.62f, 0.68f, 0.72f);
+            var light = Object.FindAnyObjectByType<Light>();
+            if (light != null) light.transform.rotation = Quaternion.Euler(55f, -35f, 0f);
+
+            // Player marker. It also drives which map tiles load (TransformTileProvider).
+            var player = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            player.name = "Player";
+            Object.DestroyImmediate(player.GetComponent<Collider>());
+            player.transform.localScale = Vector3.one * 8f; // ~5 m tall: visible from the follow camera
+            player.GetComponent<MeshRenderer>().sharedMaterial = PlayerMaterial();
+            var tileProvider = player.AddComponent<TransformTileProvider>();
+            tileProvider.TileProvider.Transform = player.transform;
+
+            // Mapbox map: street imagery + 3D buildings. Started by MapView once we know where the player is.
+            var mapGo = new GameObject("Map");
+            var map = mapGo.AddComponent<Mapbox.Example.Scripts.Map.MapboxMapBehaviour>();
+            mapGo.AddComponent<Mapbox.Example.Scripts.ModuleBehaviours.StaticApiLayerModuleScript>();
+            var vector = mapGo.AddComponent<Mapbox.VectorModule.Unity.VectorLayerModuleScript>();
+            var mapSo = new SerializedObject(map);
+            mapSo.FindProperty("InitializeOnStart").boolValue = false;
+            mapSo.FindProperty("_defaultTileMaterial").objectReferenceValue = Require<Material>(TileMaterialPath);
+            mapSo.FindProperty("TileProvider").objectReferenceValue = tileProvider;
+            mapSo.FindProperty("UnityContext.MapRoot").objectReferenceValue = mapGo.transform;
+            mapSo.FindProperty("MapInformation._zoom").floatValue = 16f;
+            mapSo.FindProperty("MapInformation._scale").floatValue = 1f;
+            mapSo.FindProperty("MapInformation._pitch").floatValue = 50f;
+            // Never commit a real location here: MapView sets the start point at runtime.
+            mapSo.FindProperty("MapInformation._latitudeLongitudeString").stringValue = "0,0";
+            mapSo.ApplyModifiedPropertiesWithoutUndo();
+            var vectorSo = new SerializedObject(vector);
+            var layers = vectorSo.FindProperty("_layerVisualizers");
+            layers.arraySize = 1;
+            layers.GetArrayElementAtIndex(0).objectReferenceValue = Require<ScriptableObject>(BuildingLayerPath);
+            vectorSo.ApplyModifiedPropertiesWithoutUndo();
+
+            var highlightGo = new GameObject("BuildingHighlight");
+            highlightGo.AddComponent<LineRenderer>();
+            var highlight = highlightGo.AddComponent<BuildingHighlight>();
 
             var game = new GameObject("Game");
-            game.AddComponent<GameClient>();
+            var client = game.AddComponent<GameClient>();
+            var location = game.AddComponent<PlayerLocation>();
+            location.HeadingReference = cam.transform;
+            var view = game.AddComponent<MapView>();
+            var viewSo = new SerializedObject(view);
+            viewSo.FindProperty("map").objectReferenceValue = map;
+            viewSo.FindProperty("location").objectReferenceValue = location;
+            viewSo.FindProperty("client").objectReferenceValue = client;
+            viewSo.FindProperty("playerMarker").objectReferenceValue = player.transform;
+            viewSo.FindProperty("mapCamera").objectReferenceValue = cam;
+            viewSo.FindProperty("highlight").objectReferenceValue = highlight;
+            viewSo.ApplyModifiedPropertiesWithoutUndo();
             game.AddComponent<DevHud>();
 
             EditorSceneManager.SaveScene(scene, DevScenePath);
@@ -96,6 +149,23 @@ namespace ZombieMap.Client.Editor
 
                 return plan.Rooms.Count > 0 && next.Result.Accepted && next.Result.View.Tick == 1;
             }
+        }
+
+        private static T Require<T>(string path) where T : Object
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<T>(path);
+            if (asset == null) throw new InvalidOperationException($"Missing {typeof(T).Name} at {path}. Is the Mapbox SDK package installed?");
+            return asset;
+        }
+
+        private static Material PlayerMaterial()
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(PlayerMaterialPath);
+            if (existing != null) return existing;
+            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit")) { color = new Color(0.95f, 0.25f, 0.2f) };
+            System.IO.Directory.CreateDirectory("Assets/_Game/Materials");
+            AssetDatabase.CreateAsset(mat, PlayerMaterialPath);
+            return mat;
         }
 
         private static string ArgValue(string name)

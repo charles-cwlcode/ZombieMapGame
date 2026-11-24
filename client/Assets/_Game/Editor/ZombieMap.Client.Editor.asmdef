@@ -3,7 +3,12 @@
     "rootNamespace": "ZombieMap.Client.Editor",
     "references": [
         "ZombieMap.Core",
-        "ZombieMap.Client"
+        "ZombieMap.Client",
+        "MapboxBaseModule",
+        "MapboxExamples",
+        "MapboxImageryModule",
+        "MapboxVectorModule",
+        "UnityMapModule"
     ],
     "includePlatforms": [
         "Editor"

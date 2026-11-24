@@ -10,3 +10,6 @@ TestResults/
 # Local secrets
 .secrets/
 *.env
+
+# Machine-specific settings (your map areas, etc.)
+appsettings.Local.json

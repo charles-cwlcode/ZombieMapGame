@@ -22,9 +22,26 @@ in, what's wrong with your body.
 ### Map and buildings
 - **Mapbox Unity SDK v3.1** (URP required) draws the map. The local package lives in
   `../mapbox-unity-sdk`.
-- The server needs **stable building IDs, building types and the right to store the data**.
-  Plan: load Overture Maps (GERS IDs) or OSM buildings and places into our own PostGIS, and match
-  them to map tiles on the client by position.
+- **Our own building data (phase 0 spike, done).** The server imports Overture Maps buildings
+  and places into PostGIS (`server/ZombieMap.Server/World/`). Building IDs are Overture GERS IDs,
+  which stay stable across releases. Mapbox's tiles are only the picture: the client never uses
+  Mapbox building IDs. A tap sends a lat/lng, and the server finds our building there (6 m tolerance).
+  - Import: DuckDB reads only the matching row groups of Overture's public GeoParquet on S3. It runs
+    automatically on server start for any configured area not yet imported. The first test town (about
+    5×6 km) has 17,137 buildings and 2,619 places, and takes about 2 minutes.
+  - Licence: everything in that area is ODbL (OpenStreetMap 89%, Microsoft ML Buildings 11%).
+    Show OSM/Overture attribution in the game.
+  - **Building types.** About 80% of UK buildings have no type in the data, so we infer it, in this
+    order. The rules re-run on every server start, so changing them needs no re-import.
+    1. The building's own class (house, retail, office…).
+    2. Size: an unlabelled building of 35–300 m² counts as a house.
+    3. Places inside the footprint override both, by priority: station, then pharmacy, then
+       shop/food, then office.
+    - Stations need place confidence ≥ 0.8, and a station point may claim the nearest station-sized
+      building within 40 m. Overture had a mis-placed station point in the test area that
+      tagged a warehouse.
+  - Loot range is checked on the server against the real wall (`ST_Distance` on geography), not the
+    building's centre.
 - **Interiors are generated**, seeded by building ID, and cached on the server
   (`FloorPlanGenerator` → `BuildingGrain`). Shown as a 2D floor plan with rooms you can tap.
 - Normal buildings: **a separate loot copy for each player**. Special buildings: shared, contested state.
@@ -100,6 +117,9 @@ client/  Unity 6000.5 (URP) ──WebSocket JSON──▶ server/ZombieMap.Serve
   as a local package (`com.zombiemap.core`). .NET builds it through `shared/ZombieMap.Core.csproj`.
 - **The server owns the game.** Encounters run in `EncounterGrain`. The client sends actions and
   gets back events plus what it's allowed to see.
+- Map data lives in PostGIS, outside Orleans: `WorldStore` reads it, and `WorldStartup` starts
+  Docker/PostGIS in Development and imports missing areas. `BuildingGrain` loads its footprint from
+  `WorldStore` by ID, so a client can't change a real building's shape.
 - Grains: `PlayerGrain` (player + active encounter), `EncounterGrain`, `BuildingGrain`.
   Later: `CellGrain` (map cells), `HordeGrain`, `LootSessionGrain`, `SafehouseGrain`.
 - Core types cross grain calls as JSON (Newtonsoft codec), since Unity can't compile Orleans attributes.
@@ -108,8 +128,9 @@ client/  Unity 6000.5 (URP) ──WebSocket JSON──▶ server/ZombieMap.Serve
 ## Phases
 
 0. **Test the risky parts.** ✅ repo, shared rules, Orleans gateway, encounter + floor-plan
-   prototypes, Unity ↔ server round trip. ⬜ Mapbox v3 on a phone. ⬜ Real building data
-   (Overture/OSM → PostGIS → stable IDs). ⬜ CC5 character performance on a mid-range phone.
+   prototypes, Unity ↔ server round trip. ✅ Real building data (Overture → PostGIS, stable IDs,
+   building types). ✅ Mapbox v3 map in Unity with keyboard GPS simulation and tap-a-building.
+   ⬜ Mapbox v3 on a phone (real GPS). ⬜ CC5 character performance on a mid-range phone.
 1. **Vertical slice.** Walk the map, loot a house room by room, weight-based inventory,
    wounds + clothing check, healing, eat, sleep at safehouse, die.
 2. Zombies and hordes on the map, noise, infection, spoilage, crafting, real weather,

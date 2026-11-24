@@ -36,6 +36,12 @@ namespace ZombieMap.Client.Net
 
         public event Action<Envelope> Pushed;
 
+        /// <summary>Raised on the main thread after each successful connect.</summary>
+        public event Action<WelcomeMessage> Welcomed;
+
+        /// <summary>The server's welcome from the last successful connect, or null.</summary>
+        public WelcomeMessage Welcome { get; private set; }
+
         public string PlayerId
         {
             get
@@ -80,6 +86,8 @@ namespace ZombieMap.Client.Net
             {
                 var welcome = await Connection.ConnectAsync(serverUrl, PlayerId, displayName);
                 Status = $"Connected as {welcome.DisplayName} ({welcome.PlayerId})";
+                Welcome = welcome;
+                Welcomed?.Invoke(welcome);
             }
             catch (Exception ex)
             {

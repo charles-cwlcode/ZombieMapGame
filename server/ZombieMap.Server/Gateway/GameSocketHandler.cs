@@ -1,10 +1,13 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using ZombieMap.Core.Buildings;
+using ZombieMap.Core.Geo;
 using ZombieMap.Core.Protocol;
 using ZombieMap.Server.Grains;
+using ZombieMap.Server.World;
 
 namespace ZombieMap.Server.Gateway;
 
@@ -13,7 +16,12 @@ namespace ZombieMap.Server.Gateway;
 /// with the same request id. Phase 0 is request/response only; server pushes (zombies moving
 /// on the map, events) will go out through the same socket later.
 /// </summary>
-public sealed partial class GameSocketHandler(IGrainFactory grains, ILogger<GameSocketHandler> log)
+public sealed partial class GameSocketHandler(
+    IGrainFactory grains,
+    WorldStore world,
+    IOptions<WorldOptions> worldOptions,
+    IHostEnvironment hostEnvironment,
+    ILogger<GameSocketHandler> log)
 {
     private const int MaxMessageBytes = 64 * 1024;
     private const int MaxFootprintPoints = 200;
@@ -94,6 +102,7 @@ public sealed partial class GameSocketHandler(IGrainFactory grains, ILogger<Game
                     return (Error(env.Id, "bad_player_id", "Player ID must be 4–64 letters, digits, - or _."), playerId);
 
                 var welcome = await grains.GetGrain<IPlayerGrain>(hello.PlayerId).Hello(hello.DisplayName);
+                if (hostEnvironment.IsDevelopment()) welcome.DevStart = DevStart();
                 log.LogInformation("Player {PlayerId} connected", hello.PlayerId);
                 return (ProtocolJson.Write(MessageTypes.Welcome, welcome, env.Id), hello.PlayerId);
             }
@@ -106,12 +115,32 @@ public sealed partial class GameSocketHandler(IGrainFactory grains, ILogger<Game
         {
             case MessageTypes.GetFloorPlan:
             {
-                var footprint = env.DataAs<GetFloorPlanRequest>()?.Footprint;
-                string? problem = ValidateFootprint(footprint);
-                if (problem != null) return (Error(env.Id, "bad_footprint", problem), playerId);
+                var request = env.DataAs<GetFloorPlanRequest>() ?? new GetFloorPlanRequest();
+                var footprint = request.Footprint;
+                string? buildingId = footprint?.BuildingId ?? request.BuildingId;
+                if (footprint != null)
+                {
+                    string? problem = ValidateFootprint(footprint);
+                    if (problem != null) return (Error(env.Id, "bad_footprint", problem), playerId);
+                }
+                else if (string.IsNullOrWhiteSpace(buildingId) || buildingId.Length > 128)
+                {
+                    return (Error(env.Id, "bad_building_id", "Send a building ID (1–128 characters)."), playerId);
+                }
+                // TODO(phase 1): check the player is within loot range of a real building before showing its rooms.
 
-                var plan = await grains.GetGrain<IBuildingGrain>(footprint!.BuildingId).GetFloorPlan(footprint);
+                var plan = await grains.GetGrain<IBuildingGrain>(buildingId!).GetFloorPlan(footprint);
                 return (ProtocolJson.Write(MessageTypes.FloorPlan, new FloorPlanMessage { Plan = plan }, env.Id), playerId);
+            }
+
+            case MessageTypes.BuildingAt:
+            {
+                var request = env.DataAs<BuildingAtRequest>();
+                if (request == null || !request.Point.IsValid || !request.PlayerPosition.IsValid)
+                    return (Error(env.Id, "bad_position", "Send a valid tap point and player position."), playerId);
+
+                var building = await world.FindBuildingAtAsync(request.Point, request.PlayerPosition);
+                return (ProtocolJson.Write(MessageTypes.Building, new BuildingMessage { Building = building }, env.Id), playerId);
             }
 
             case MessageTypes.StartEncounter:
@@ -147,6 +176,13 @@ public sealed partial class GameSocketHandler(IGrainFactory grains, ILogger<Game
         if (w > MaxFootprintExtentMetres || h > MaxFootprintExtentMetres) return "Footprint is too large.";
         if (w < 2 || h < 2) return "Footprint is too small.";
         return null;
+    }
+
+    /// <summary>Centre of the first configured map area, so GPS simulation starts somewhere with buildings.</summary>
+    private LatLng? DevStart()
+    {
+        var area = worldOptions.Value.Areas.FirstOrDefault(a => a.IsValid);
+        return area == null ? null : new LatLng((area.South + area.North) / 2, (area.West + area.East) / 2);
     }
 
     private static string Error(int id, string code, string message) =>

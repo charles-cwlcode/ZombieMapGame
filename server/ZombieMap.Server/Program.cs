@@ -1,7 +1,21 @@
+using Microsoft.Extensions.Options;
+using Npgsql;
 using Orleans.Serialization;
 using ZombieMap.Server.Gateway;
+using ZombieMap.Server.World;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Your own map areas and other machine-specific settings (git-ignored).
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
+
+// Real-world map data: PostGIS, filled from Overture Maps. WorldStartup gets it ready in the
+// background (starting Docker in Development) so the server is usable straight away.
+builder.Services.Configure<WorldOptions>(builder.Configuration.GetSection(WorldOptions.Section));
+builder.Services.AddSingleton(sp => NpgsqlDataSource.Create(sp.GetRequiredService<IOptions<WorldOptions>>().Value.ConnectionString));
+builder.Services.AddSingleton<WorldStore>();
+builder.Services.AddSingleton<OvertureImporter>();
+builder.Services.AddHostedService<WorldStartup>();
 
 // Orleans silo hosted in the same process as the WebSocket gateway.
 // Phase 0: one local silo, in-memory storage. Later: PostgreSQL storage + clustering.
@@ -21,7 +35,7 @@ var app = builder.Build();
 
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20) });
 
-app.MapGet("/", () => "ZombieMap server is running. Connect a WebSocket to /ws.");
+app.MapGet("/", (WorldStore world) => $"ZombieMap server is running. Connect a WebSocket to /ws. Map data: {world.Status}.");
 
 app.Map("/ws", async (HttpContext context, GameSocketHandler handler) =>
 {

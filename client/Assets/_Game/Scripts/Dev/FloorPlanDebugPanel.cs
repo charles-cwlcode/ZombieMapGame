@@ -28,6 +28,16 @@ namespace ZombieMap.Client.Dev
 
         public FloorPlanDebugPanel(GameClient client) => _client = client;
 
+        /// <summary>Show a plan fetched elsewhere (a real building tapped on the map).</summary>
+        public void ShowPlan(FloorPlan plan, string title)
+        {
+            _plan = plan;
+            _selected = null;
+            _buildingId = plan.BuildingId;
+            _kind = plan.Kind;
+            _status = "Real building: " + title;
+        }
+
         public void OnGUI(Rect area)
         {
             GUILayout.BeginArea(area);
