@@ -1,13 +1,14 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using ZombieMap.Server.Storage;
 
 namespace ZombieMap.Server.World;
 
 /// <summary>
 /// Gets the map database ready in the background while the server is already accepting connections:
 ///   1. Development: start Docker Desktop if needed, then `docker compose up` the PostGIS container.
-///   2. Create tables.
+///   2. Create tables. From here players can be saved (<see cref="DatabaseReady"/>).
 ///   3. Import any configured area that isn't in the database yet (Overture → PostGIS, ~1 min a town).
 /// If anything fails, map features report "world_offline" and everything else keeps working.
 /// </summary>
@@ -15,6 +16,7 @@ public sealed class WorldStartup(
     WorldStore store,
     NpgsqlDataSource db,
     OvertureImporter importer,
+    DatabaseReady databaseReady,
     IOptions<WorldOptions> options,
     IHostEnvironment env,
     ILogger<WorldStartup> log) : BackgroundService
@@ -35,6 +37,11 @@ public sealed class WorldStartup(
             store.MarkLoading("connecting to database");
             await WaitForDatabaseAsync(ct);
 
+            // Players can be saved from here on, even while the map is still importing.
+            await using (var cmd = db.CreateCommand(PostgresGrainStorage.Schema))
+                await cmd.ExecuteNonQueryAsync(ct);
+            databaseReady.MarkReady();
+
             await using (var cmd = db.CreateCommand(WorldSchema.Sql))
                 await cmd.ExecuteNonQueryAsync(ct);
 
@@ -50,6 +57,7 @@ public sealed class WorldStartup(
             log.LogError(ex, "Map data is offline. Encounters still work; building lookups will fail. " +
                              "Is Docker Desktop installed and running?");
             store.MarkOffline(ex.Message);
+            databaseReady.MarkFailed(ex); // no effect if the database itself came up
         }
     }
 

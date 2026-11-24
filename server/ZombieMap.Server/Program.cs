@@ -1,7 +1,10 @@
 using Microsoft.Extensions.Options;
 using Npgsql;
 using Orleans.Serialization;
+using Orleans.Providers;
+using Orleans.Runtime.Hosting;
 using ZombieMap.Server.Gateway;
+using ZombieMap.Server.Storage;
 using ZombieMap.Server.World;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,8 +20,12 @@ builder.Services.AddSingleton<WorldStore>();
 builder.Services.AddSingleton<OvertureImporter>();
 builder.Services.AddHostedService<WorldStartup>();
 
-// Orleans silo hosted in the same process as the WebSocket gateway.
-// Phase 0: one local silo, in-memory storage. Later: PostgreSQL storage + clustering.
+// Players, loot, encounters and floor plans are saved in the same PostgreSQL (Storage:Provider
+// "Postgres", the default). "Memory" forgets everything on restart: only for quick experiments.
+builder.Services.AddSingleton<DatabaseReady>();
+bool memoryStorage = string.Equals(builder.Configuration["Storage:Provider"], "Memory", StringComparison.OrdinalIgnoreCase);
+
+// Orleans silo hosted in the same process as the WebSocket gateway. One local silo for now.
 builder.UseOrleans(silo =>
 {
     // Ports are configurable so a second copy can run next to one in the debugger:
@@ -26,7 +33,9 @@ builder.UseOrleans(silo =>
     silo.UseLocalhostClustering(
         siloPort: builder.Configuration.GetValue("Orleans:SiloPort", 11111),
         gatewayPort: builder.Configuration.GetValue("Orleans:GatewayPort", 30000));
-    silo.AddMemoryGrainStorageAsDefault();
+    if (memoryStorage) silo.AddMemoryGrainStorageAsDefault();
+    else silo.Services.AddGrainStorage(ProviderConstants.DEFAULT_STORAGE_PROVIDER_NAME,
+        (sp, _) => ActivatorUtilities.CreateInstance<PostgresGrainStorage>(sp));
     // Shared ZombieMap.Core types have no Orleans attributes (Unity compiles them too),
     // so they cross grain calls and storage as JSON.
     silo.Services.AddSerializer(serializer => serializer.AddNewtonsoftJsonSerializer(

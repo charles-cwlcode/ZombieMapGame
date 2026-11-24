@@ -26,6 +26,18 @@ namespace ZombieMap.Core.Protocol
         public static readonly JsonSerializerSettings Settings = CreateSettings();
         public static readonly JsonSerializer Serializer = JsonSerializer.Create(Settings);
 
+        /// <summary>
+        /// For saved state on the server (not the wire): plain property names, so dictionary keys stay
+        /// as they are; enums by name, so reordering an enum never changes saved data; and new objects
+        /// for every collection on read, so defaults are never doubled up.
+        /// </summary>
+        public static readonly JsonSerializerSettings StorageSettings = new JsonSerializerSettings
+        {
+            Converters = { new StringEnumConverter() },
+            ObjectCreationHandling = ObjectCreationHandling.Replace,
+            MissingMemberHandling = MissingMemberHandling.Ignore,
+        };
+
         private static JsonSerializerSettings CreateSettings()
         {
             var s = new JsonSerializerSettings

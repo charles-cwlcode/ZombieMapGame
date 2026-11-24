@@ -13,7 +13,13 @@ using ZombieMap.Core.Health;
 using ZombieMap.Core.Items;
 using ZombieMap.Core.Protocol;
 
-string url = args.Length > 0 ? args[0] : "ws://localhost:5080/ws";
+//   dotnet run --project server/ZombieMap.DevClient -- [url] --resume <playerId>
+// reconnects as a player from an earlier run (e.g. after restarting the server) and checks their
+// survivor, safehouse and stash were saved.
+
+int resumeAt = Array.IndexOf(args, "--resume");
+string? resumeId = resumeAt >= 0 && resumeAt + 1 < args.Length ? args[resumeAt + 1] : null;
+string url = args.FirstOrDefault(a => a.StartsWith("ws")) ?? "ws://localhost:5080/ws";
 using var socket = new ClientWebSocket();
 await socket.ConnectAsync(new Uri(url), CancellationToken.None);
 Console.WriteLine($"Connected to {url}");
@@ -23,10 +29,23 @@ int failures = 0;
 // 1. Hello
 var welcome = (await Request(MessageTypes.Hello, new HelloRequest
 {
-    PlayerId = "devclient-" + Guid.NewGuid().ToString("N")[..8],
+    PlayerId = resumeId ?? "devclient-" + Guid.NewGuid().ToString("N")[..8],
     DisplayName = "Dev Client",
 })).DataAs<WelcomeMessage>();
 Console.WriteLine($"Welcome {welcome.DisplayName} ({welcome.PlayerId})");
+
+if (resumeId != null)
+{
+    var saved = (await Request(MessageTypes.HealthGet, new { })).DataAs<HealthMessage>();
+    Console.WriteLine($"Survivor #{saved.SurvivorNumber}: blood {saved.Body.Blood}, food {saved.Body.Food}, water {saved.Body.Water}, " +
+                      $"{saved.Body.Wounds.Count} wounds, dead {saved.Body.Dead}; carrying {saved.Inventory.Main.Items.Count} stacks");
+    Check(saved.Safehouse != null, "the safehouse was saved");
+    Check(saved.Safehouse?.Stash.Items.Any(s => s.ItemId == "drink.water_bottle") == true, "the stash still has the water");
+    Check(saved.Inventory.Main.Items.Count > 0 || saved.Inventory.Worn.Count > 0, "the inventory was saved");
+    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
+    Console.WriteLine(failures == 0 ? "\nRESUME CHECK PASSED" : $"\nRESUME CHECK FAILED ({failures})");
+    return failures == 0 ? 0 : 1;
+}
 
 // 2. Floor plan for an L-shaped house, twice.
 var footprint = new BuildingFootprint

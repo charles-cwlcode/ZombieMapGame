@@ -101,6 +101,7 @@ Unity ↔ server round trip (no graphics needed):
   blocks hits and wears, encounters that use your real body and bag, death and a new survivor
 - ✅ Hunger, thirst and fatigue in real time; eating and drinking; a safehouse with a stash; sleeping there
 - ✅ Death is a survivor line: the next survivor keeps the safehouse stash
+- ✅ Everything is saved in PostgreSQL (`grain_state` table), so a server restart keeps players
 
 ## Mapbox SDK v3.1 needs a patch for Unity 6000.5
 Stock v3.1 doesn't compile on Unity 6.5: `ElevatedTerrainStrategy.cs` uses `GetInstanceID()` and
@@ -113,7 +114,6 @@ warnings). Import `LocationBasedGame` from the Package Manager if you need it as
 
 ## Not done yet (on purpose)
 - No real sign-in: the client sends a device ID. Must be fixed before anything public.
-- In-memory storage only: restarting the server forgets everything.
 - The client sends its own position with `building.at`. The server will track position itself.
 - `floorPlan.get` doesn't check loot range yet (`building.at` does).
 - The Building tab can still send hand-made footprints, for IDs the map data doesn't know.

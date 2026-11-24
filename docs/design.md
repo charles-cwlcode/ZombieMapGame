@@ -189,8 +189,15 @@ client/  Unity 6000.5 (URP) ──WebSocket JSON──▶ server/ZombieMap.Serve
 - Map data lives in PostGIS, outside Orleans: `WorldStore` reads it, and `WorldStartup` starts
   Docker/PostGIS in Development and imports missing areas. `BuildingGrain` loads its footprint from
   `WorldStore` by ID, so a client can't change a real building's shape.
-- Grains: `PlayerGrain` (player + active encounter), `EncounterGrain`, `BuildingGrain`.
-  Later: `CellGrain` (map cells), `HordeGrain`, `LootSessionGrain`, `SafehouseGrain`.
+- Grains: `PlayerGrain` (player, body, inventory, safehouse + active encounter), `EncounterGrain`,
+  `BuildingGrain` (cached floor plan), `LootGrain` (one player's loot in one building).
+  Later: `CellGrain` (map cells), `HordeGrain`, shared loot for special buildings.
+- **Saved state:** every grain's state is a row in the `grain_state` table of the same PostgreSQL,
+  as readable `jsonb` (`PostgresGrainStorage`, settings in `ProtocolJson.StorageSettings`). Writes
+  check a version counter, so two writes can't silently overwrite each other. Saved state must stay
+  readable as the code changes: add fields freely, but never rename or remove one (enums are saved
+  by name, so they can be reordered). `Storage:Provider = Memory` switches back to in-memory for
+  experiments.
 - Core types cross grain calls as JSON (Newtonsoft codec), since Unity can't compile Orleans attributes.
 - Protocol: one JSON envelope per frame, `{type, id, data}`. A reply uses the request's `id`.
 
