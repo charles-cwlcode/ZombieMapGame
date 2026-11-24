@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Builds the shared rules library for the server and tests.
+    The source lives in ZombieMap.Core/Runtime, which is also a Unity package
+    (com.zombiemap.core) that the client references directly. bin/obj stay here,
+    outside the package folder, so Unity never imports them.
+    Keep the code to C# 9 / netstandard2.1 so Unity can compile it.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>ZombieMap.Core</AssemblyName>
+    <RootNamespace>ZombieMap.Core</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ZombieMap.Core/Runtime/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+</Project>

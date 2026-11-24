@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/server/">
+    <Project Path="server/ZombieMap.DevClient/ZombieMap.DevClient.csproj" />
+    <Project Path="server/ZombieMap.Server/ZombieMap.Server.csproj" />
+  </Folder>
+  <Folder Name="/shared/">
+    <Project Path="shared/ZombieMap.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ZombieMap.Core.Tests/ZombieMap.Core.Tests.csproj" />
+  </Folder>
+</Solution>

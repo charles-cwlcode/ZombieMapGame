@@ -1,0 +1,12 @@
+# .NET (server, shared, tests)
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+TestResults/
+
+# Local secrets
+.secrets/
+*.env

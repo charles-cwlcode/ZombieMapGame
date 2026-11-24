@@ -1,0 +1,21 @@
+{
+    "name": "ZombieMap.Client.Editor",
+    "rootNamespace": "ZombieMap.Client.Editor",
+    "references": [
+        "ZombieMap.Core",
+        "ZombieMap.Client"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

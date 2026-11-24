@@ -1,0 +1,10 @@
+{
+  "name": "com.zombiemap.core",
+  "version": "0.1.0",
+  "displayName": "ZombieMap Core",
+  "description": "Shared game rules and network protocol used by both the Unity client and the Orleans server. Plain C# (netstandard2.1), no UnityEngine references.",
+  "unity": "6000.0",
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  }
+}
