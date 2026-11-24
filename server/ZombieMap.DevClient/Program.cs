@@ -82,6 +82,7 @@ if (welcome.DevStart is LatLng start)
         Check(ProtocolJson.Serialize(spoofed) == ProtocolJson.Serialize(real), "client footprint can't override a real building");
 
         await LootChecks(found.BuildingId, real, probe);
+        await SafehouseChecks(found, probe);
     }
 
     var unknown = await Request(MessageTypes.GetFloorPlan, new GetFloorPlanRequest { BuildingId = "no-such-building-" + Guid.NewGuid().ToString("N")[..6] }, allowError: true);
@@ -169,6 +170,11 @@ var off = (await Request(MessageTypes.ClothingTakeOff, new StackRequest { StackI
 Check(off.Inventory.Main.Find(shirt.Id) != null && off.Inventory.Worn.All(w => w.Id != shirt.Id), "took the T-shirt off into pockets");
 var on = (await Request(MessageTypes.ClothingWear, new StackRequest { StackId = shirt.Id })).DataAs<HealthMessage>();
 Check(on.Inventory.Worn.Any(w => w.Id == shirt.Id), "put it back on");
+
+// 9. The safehouse stash belongs to the survivor line: still there even if this survivor died above.
+if (on.Safehouse != null)
+    Check(on.Safehouse.Stash.Items.Any(s => s.ItemId == "drink.water_bottle"),
+        $"survivor #{on.SurvivorNumber} still has the water stashed at the safehouse");
 
 await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
 Console.WriteLine(failures == 0 ? "\nSMOKE TEST PASSED" : $"\nSMOKE TEST FAILED ({failures})");
@@ -299,4 +305,38 @@ async Task LootChecks(string buildingId, FloorPlan plan, LatLng here)
         })).DataAs<LootMessage>();
         Check(put.Contents.Items.Any(s => s.ItemId == item.ItemId) && put.Inventory.Main.Find(mine.Id) == null, "put it back");
     }
+}
+
+// Claim the building as a safehouse, stash things, try to sleep and eat.
+async Task SafehouseChecks(BuildingInfo building, LatLng here)
+{
+    var away = GeoMath.Offset(here, 500, 0);
+    var far = await Request(MessageTypes.SafehouseClaim, new SafehouseClaimRequest { BuildingId = building.BuildingId, PlayerPosition = away }, allowError: true);
+    Check(far.Type == MessageTypes.Error && far.DataAs<ErrorMessage>().Code == "too_far", "can't claim a safehouse from 500 m away");
+
+    var claimed = (await Request(MessageTypes.SafehouseClaim, new SafehouseClaimRequest { BuildingId = building.BuildingId, PlayerPosition = here })).DataAs<HealthMessage>();
+    Check(claimed.Safehouse?.BuildingId == building.BuildingId && claimed.Safehouse.Kind == building.Kind && claimed.Safehouse.Stash.Items.Count == 0,
+        $"claimed the {building.Kind.ToString().ToLowerInvariant()} as a safehouse");
+
+    var choc = claimed.Inventory.Main.Items.First(s => s.ItemId == "food.chocolate");
+    var stored = (await Request(MessageTypes.SafehouseStore, new SafehouseItemRequest { StackId = choc.Id, PlayerPosition = here })).DataAs<HealthMessage>();
+    Check(stored.Safehouse.Stash.Find(choc.Id) != null && stored.Inventory.Main.Find(choc.Id) == null, "stashed the chocolate");
+
+    var farStore = await Request(MessageTypes.SafehouseRetrieve, new SafehouseItemRequest { StackId = choc.Id, To = PlayerInventory.MainId, PlayerPosition = away }, allowError: true);
+    Check(farStore.Type == MessageTypes.Error && farStore.DataAs<ErrorMessage>().Code == "too_far", "the stash only works at the safehouse");
+
+    var back = (await Request(MessageTypes.SafehouseRetrieve, new SafehouseItemRequest { StackId = choc.Id, To = PlayerInventory.MainId, PlayerPosition = here })).DataAs<HealthMessage>();
+    var mine = back.Inventory.Main.Items.FirstOrDefault(s => s.ItemId == "food.chocolate");
+    Check(mine != null && back.Safehouse.Stash.Items.Count == 0, "took it back out of the stash");
+
+    var full = await Request(MessageTypes.HealthEat, new StackRequest { StackId = mine!.Id }, allowError: true);
+    Check(full.Type == MessageTypes.Error && full.DataAs<ErrorMessage>().Code == "eat", $"a fed survivor won't eat ({full.DataAs<ErrorMessage>()?.Message})");
+
+    var awake = await Request(MessageTypes.Sleep, new PositionRequest { PlayerPosition = here }, allowError: true);
+    Check(awake.Type == MessageTypes.Error && awake.DataAs<ErrorMessage>().Code == "sleep", $"a rested survivor can't sleep ({awake.DataAs<ErrorMessage>()?.Message})");
+    Console.WriteLine($"  Needs: food {back.Body.Food}, water {back.Body.Water}, fatigue {back.Body.Fatigue}");
+
+    // Leave the water in the stash: it should outlive this survivor.
+    var water = back.Inventory.Main.Items.First(s => s.ItemId == "drink.water_bottle");
+    await Request(MessageTypes.SafehouseStore, new SafehouseItemRequest { StackId = water.Id, PlayerPosition = here });
 }

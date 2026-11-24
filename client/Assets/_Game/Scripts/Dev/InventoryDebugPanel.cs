@@ -71,6 +71,29 @@ namespace ZombieMap.Client.Dev
                 GUILayout.EndHorizontal();
             }
 
+            GUILayout.Space(10);
+            var safehouse = _loot.Safehouse;
+            if (safehouse == null)
+            {
+                GUILayout.Label("No safehouse. Select a building on the Map tab and press \"Make safehouse\".");
+            }
+            else
+            {
+                var stash = safehouse.Stash;
+                GUILayout.Label($"<b>Safehouse stash</b> ({safehouse.Kind})  {InventoryRules.Used(stash):0.0} / {stash.Capacity:0} kg. " +
+                                "Kept when you die. You need to be at the safehouse to use it.", Rich);
+                if (stash.Items.Count == 0) GUILayout.Label("   (empty)");
+                foreach (var s in stash.Items)
+                {
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label($"   {Describe(s, s.Def())}", GUILayout.Width(330));
+                    GUILayout.Label($"{InventoryRules.Weight(s):0.00} kg", GUILayout.Width(60));
+                    if (GUILayout.Button("To pockets", GUILayout.Width(80))) _ = _loot.Retrieve(s.Id);
+                    if (inv.Back != null && GUILayout.Button("To bag", GUILayout.Width(65))) _ = _loot.Retrieve(s.Id, to: PlayerInventory.BackId);
+                    GUILayout.EndHorizontal();
+                }
+            }
+
             GUI.enabled = true;
             GUILayout.EndScrollView();
             GUILayout.EndArea();
@@ -91,6 +114,9 @@ namespace ZombieMap.Client.Dev
                 if (inBag && GUILayout.Button("To pockets", GUILayout.Width(80))) _ = _loot.Move(s.Id, PlayerInventory.MainId);
                 if (!inBag && def.IsBag && def.WornOnBack && GUILayout.Button("Wear", GUILayout.Width(55))) _ = _loot.Equip(s.Id);
                 if (def.IsClothing && GUILayout.Button("Wear", GUILayout.Width(55))) _ = _loot.Wear(s.Id);
+                if (def.Category == ItemCategory.Food && GUILayout.Button("Eat", GUILayout.Width(45))) _ = _loot.EatOrDrink(s.Id);
+                if (def.Category == ItemCategory.Drink && GUILayout.Button("Drink", GUILayout.Width(50))) _ = _loot.EatOrDrink(s.Id);
+                if (_loot.Safehouse != null && GUILayout.Button("Stash", GUILayout.Width(55))) _ = _loot.Store(s.Id);
                 if (_loot.OpenContainer != null && GUILayout.Button("Put", GUILayout.Width(45))) _ = _loot.Put(s.Id);
                 if (GUILayout.Button("Drop", GUILayout.Width(50))) _ = _loot.Drop(s.Id);
                 GUILayout.EndHorizontal();

@@ -49,12 +49,22 @@ public class HealthTests
     }
 
     [Fact]
-    public void BeingOfflineDoesNotBleedYouOut()
+    public void BleedingKeepsGoingWhileYouAreOffline()
     {
         var b = Body(new Wound { Part = BodyPart.LeftForearm, Kind = WoundKind.Laceration, Bleeding = true });
         BodyRules.Advance(b, T0 + 10 * 3600); // came back 10 hours later
-        Assert.False(b.Dead);
-        Assert.Equal(94, b.Blood); // only the first 2 minutes counted
+        Assert.True(b.Dead);
+        Assert.Equal("Bled out", b.DeathCause);
+    }
+
+    [Fact]
+    public void ALongGapIsWorkedThroughInOrder()
+    {
+        // A scratch clots after 3 minutes: one big jump costs only those 3 minutes of blood (9), not 200 s worth.
+        var b = Body(new Wound { Part = BodyPart.LeftHand, Kind = WoundKind.Scratch, Bleeding = true });
+        BodyRules.Advance(b, T0 + 200);
+        Assert.Equal(91, b.Blood);
+        Assert.False(b.Wounds[0].Bleeding);
     }
 
     [Fact]
@@ -90,10 +100,10 @@ public class HealthTests
     {
         var w = new Wound { Part = BodyPart.LeftForearm, Kind = WoundKind.Bite, Bandage = BandageKind.Rag, BandagedAt = T0, Disinfected = true };
         var b = Body(w);
-        BodyRules.Advance(b, T0 + BodyRules.RagDirtySeconds + 1); // offline: bandage gets dirty, no infection yet
+        BodyRules.Advance(b, T0 + BodyRules.RagDirtySeconds + 1); // the rag gets dirty, no infection yet
         Assert.True(BodyRules.BandageDirty(w, b.LastUpdated));
         Assert.False(w.Infected);
-        PlayFor(b, (long)BodyRules.InfectAfterSeconds + 60);
+        BodyRules.Advance(b, b.LastUpdated + (long)BodyRules.InfectAfterSeconds + 60); // offline counts too
         Assert.True(w.Infected);
     }
 
@@ -272,5 +282,107 @@ public class HealthTests
             return string.Join(",", log);
         }
         Assert.Equal(Play(null), Play(new List<ItemStack>()));
+    }
+
+    // ---------- hunger, thirst, sleep ----------
+
+    [Fact]
+    public void ThirstEmptiesInADayThenKillsAboutTwoDaysLater()
+    {
+        var b = Body();
+        BodyRules.Advance(b, T0 + 24 * 3600);
+        Assert.True(b.Water <= 0.01);
+        Assert.False(b.Dead);
+        Assert.True(b.Food > 60);
+        BodyRules.Advance(b, T0 + 70 * 3600);
+        Assert.True(b.Blood < 30 && !b.Dead, $"blood {b.Blood}");
+        BodyRules.Advance(b, T0 + 74 * 3600);
+        Assert.True(b.Dead);
+        Assert.Equal("Dehydration", b.DeathCause);
+    }
+
+    [Fact]
+    public void StarvingIsSlowerThanThirst()
+    {
+        var b = Body();
+        b.Water = 1e9; // never thirsty, to see hunger on its own
+        BodyRules.Advance(b, T0 + 72 * 3600 + 60);
+        Assert.Equal(0, b.Food);
+        Assert.False(b.Dead);
+        BodyRules.Advance(b, T0 + (72 + 9 * 24) * 3600);
+        Assert.False(b.Dead);
+        BodyRules.Advance(b, T0 + (72 + 11 * 24) * 3600);
+        Assert.True(b.Dead);
+        Assert.Equal("Starvation", b.DeathCause);
+    }
+
+    [Fact]
+    public void EatingAndDrinkingFillYouUp()
+    {
+        var b = Body();
+        b.Food = 20;
+        b.Water = 20;
+        var inv = Inv(("food.canned_beans", 2), ("drink.water_bottle", 1));
+        Assert.Null(BodyRules.EatOrDrink(b, inv, inv.Main.Items[0].Id, T0));
+        Assert.Equal(20 + 380 / 60.0, b.Food, 3);
+        Assert.Equal(1, inv.Main.Items[0].Count);
+        var water = inv.Main.Items.Single(s => s.ItemId == "drink.water_bottle");
+        Assert.Null(BodyRules.EatOrDrink(b, inv, water.Id, T0));
+        Assert.Equal(20 + 500 / 20.0, b.Water, 3);
+        Assert.DoesNotContain(inv.Main.Items, s => s.ItemId == "drink.water_bottle");
+    }
+
+    [Fact]
+    public void SomeThingsCantBeEaten()
+    {
+        var b = Body();
+        b.Food = 10;
+        var inv = Inv(("food.rice", 1), ("food.bread", 1), ("med.rag", 1));
+        Assert.Contains("cooking", BodyRules.EatOrDrink(b, inv, inv.Main.Items[0].Id, T0));
+        inv.Main.Items[1].FreshUntilDay = T0 / 86400 - 1;
+        Assert.Contains("gone off", BodyRules.EatOrDrink(b, inv, inv.Main.Items[1].Id, T0));
+        Assert.Contains("can't eat", BodyRules.EatOrDrink(b, inv, inv.Main.Items[2].Id, T0));
+        b.Food = 100;
+        inv.Main.Items[1].FreshUntilDay = 0;
+        Assert.Equal("You're not hungry.", BodyRules.EatOrDrink(b, inv, inv.Main.Items[1].Id, T0));
+        Assert.Equal(3, inv.Main.Items.Count);
+    }
+
+    [Fact]
+    public void SleepNeedsTirednessAndNoBleeding()
+    {
+        var b = Body();
+        Assert.Equal("You're not tired.", BodyRules.Sleep(b));
+        b.Fatigue = 60;
+        b.Wounds.Add(new Wound { Id = 1, Part = BodyPart.LeftHand, Kind = WoundKind.Laceration, Bleeding = true, CreatedAt = T0 });
+        Assert.Contains("bleed", BodyRules.Sleep(b));
+        b.Wounds.Clear();
+        Assert.Null(BodyRules.Sleep(b));
+        Assert.True(b.Asleep);
+    }
+
+    [Fact]
+    public void SleepingRestsYouAndSlowsHungerAndThirst()
+    {
+        var awake = Body();
+        var asleep = Body();
+        awake.Fatigue = asleep.Fatigue = 80;
+        asleep.Asleep = true;
+        BodyRules.Advance(awake, T0 + 8 * 3600);
+        BodyRules.Advance(asleep, T0 + 8 * 3600);
+        Assert.Equal(0, asleep.Fatigue, 3);
+        Assert.Equal(100, awake.Fatigue, 3);
+        Assert.True(asleep.Water > awake.Water + 10);
+    }
+
+    [Fact]
+    public void ExhaustionCapsEndurance()
+    {
+        var b = Body();
+        b.Fatigue = 95;
+        b.Endurance = 100;
+        BodyRules.Advance(b, T0 + 60);
+        Assert.Equal(50, b.Endurance);
+        Assert.Equal(50, BodyRules.ToView(b, T0 + 60).EnduranceCap);
     }
 }

@@ -217,6 +217,49 @@ public sealed partial class GameSocketHandler(
             case MessageTypes.NewSurvivor:
                 return (ProtocolJson.Write(MessageTypes.Health, await grains.GetGrain<IPlayerGrain>(playerId).NewSurvivor(), env.Id), playerId);
 
+            // ---------- food, sleep, safehouse ----------
+
+            case MessageTypes.HealthEat:
+            {
+                var r = env.DataAs<StackRequest>();
+                if (r == null || !ValidId(r.StackId)) return (Error(env.Id, "bad_request", "Missing item."), playerId);
+                return (ProtocolJson.Write(MessageTypes.Health, await grains.GetGrain<IPlayerGrain>(playerId).EatOrDrink(r.StackId), env.Id), playerId);
+            }
+
+            case MessageTypes.Sleep:
+            {
+                var r = env.DataAs<PositionRequest>();
+                var player = grains.GetGrain<IPlayerGrain>(playerId);
+                await RequireAtSafehouse(player, r?.PlayerPosition ?? default);
+                return (ProtocolJson.Write(MessageTypes.Health, await player.Sleep(), env.Id), playerId);
+            }
+
+            case MessageTypes.Wake:
+                return (ProtocolJson.Write(MessageTypes.Health, await grains.GetGrain<IPlayerGrain>(playerId).Wake(), env.Id), playerId);
+
+            case MessageTypes.SafehouseClaim:
+            {
+                var r = env.DataAs<SafehouseClaimRequest>();
+                if (r == null || !ValidBuildingId(r.BuildingId)) return (Error(env.Id, "bad_request", "Which building?"), playerId);
+                await RequireInLootRange(r.BuildingId, r.PlayerPosition);
+                var kind = await SafehouseKind(r.BuildingId);
+                return (ProtocolJson.Write(MessageTypes.Health, await grains.GetGrain<IPlayerGrain>(playerId).ClaimSafehouse(r.BuildingId, kind), env.Id), playerId);
+            }
+
+            case MessageTypes.SafehouseStore:
+            case MessageTypes.SafehouseRetrieve:
+            {
+                var r = env.DataAs<SafehouseItemRequest>();
+                if (r == null || !ValidId(r.StackId)) return (Error(env.Id, "bad_request", "Missing item."), playerId);
+                var player = grains.GetGrain<IPlayerGrain>(playerId);
+                await RequireAtSafehouse(player, r.PlayerPosition);
+                HealthMessage reply;
+                if (env.Type == MessageTypes.SafehouseStore) reply = await player.StoreInSafehouse(r.StackId, r.Count);
+                else if (!ValidId(r.To)) return (Error(env.Id, "bad_request", "Missing target."), playerId);
+                else reply = await player.RetrieveFromSafehouse(r.StackId, r.Count, r.To);
+                return (ProtocolJson.Write(MessageTypes.Health, reply, env.Id), playerId);
+            }
+
             // ---------- looting (loot range is checked here, on the server) ----------
 
             case MessageTypes.LootSearch:
@@ -292,6 +335,33 @@ public sealed partial class GameSocketHandler(
         }
         if (distance > world.LootRangeMetres)
             throw new GameRuleException("too_far", $"You're {distance:0} m away. Get within {world.LootRangeMetres:0} m.");
+    }
+
+    /// <summary>Sleeping and the stash need you to be at your safehouse (within loot range of it).</summary>
+    private async Task RequireAtSafehouse(IPlayerGrain player, LatLng position)
+    {
+        var id = await player.SafehouseId() ?? throw new GameRuleException("no_safehouse", "You don't have a safehouse yet. Claim a building first.");
+        try
+        {
+            await RequireInLootRange(id, position);
+        }
+        catch (GameRuleException ex) when (ex.Code == "too_far")
+        {
+            throw new GameRuleException("too_far", "You need to be at your safehouse. " + ex.Message);
+        }
+    }
+
+    /// <summary>The building type from the map data. Dev buildings the map doesn't know count as houses.</summary>
+    private async Task<BuildingKind> SafehouseKind(string buildingId)
+    {
+        try
+        {
+            var footprint = await world.GetFootprintAsync(buildingId);
+            if (footprint != null) return footprint.Kind;
+        }
+        catch (GameRuleException) when (hostEnvironment.IsDevelopment()) { }
+        if (!hostEnvironment.IsDevelopment()) throw new GameRuleException("unknown_building", "There's no building with that ID.");
+        return BuildingKind.House;
     }
 
     private static bool ValidId(string? id) => !string.IsNullOrWhiteSpace(id) && id.Length <= 64;

@@ -1,3 +1,4 @@
+using ZombieMap.Core.Buildings;
 using ZombieMap.Core.Encounters;
 using ZombieMap.Core.Health;
 using ZombieMap.Core.Items;
@@ -16,6 +17,10 @@ public sealed class PlayerState
     [Id(5)] public BodyState? Body { get; set; }
     /// <summary>Medical supplies the active encounter started with (to know what it used up).</summary>
     [Id(6)] public Supplies? EncounterSupplies { get; set; }
+    /// <summary>Your safehouse and its stash. Kept when a survivor dies: it belongs to the line.</summary>
+    [Id(7)] public SafehouseView? Safehouse { get; set; }
+    /// <summary>Which survivor in the line this is (1 = the first).</summary>
+    [Id(8)] public int SurvivorNumber { get; set; } = 1;
 }
 
 public sealed class PlayerGrain(
@@ -229,16 +234,23 @@ public sealed class PlayerGrain(
         return state.State.Body;
     }
 
-    private void RequireAlive()
+    /// <summary>Doing anything (other than looking) wakes you up. Throws if you're dead.</summary>
+    private BodyState RequireAlive()
     {
         var body = Body();
         if (body.Dead) throw new GameRuleException("dead", $"You're dead ({body.DeathCause}). Start a new survivor.");
+        BodyRules.Wake(body);
+        return body;
     }
 
     private HealthMessage Health()
     {
         long now = Now();
-        return new HealthMessage { Body = BodyRules.ToView(Body(), now), Inventory = Inv, Now = now };
+        return new HealthMessage
+        {
+            Body = BodyRules.ToView(Body(), now), Inventory = Inv, Now = now,
+            Safehouse = state.State.Safehouse, SurvivorNumber = state.State.SurvivorNumber,
+        };
     }
 
     public Task<HealthMessage> GetHealth() => Task.FromResult(Health());
@@ -246,7 +258,7 @@ public sealed class PlayerGrain(
     public async Task<HealthMessage> Treat(int woundId, TreatAction action)
     {
         if (state.State.ActiveEncounterId != null) throw new GameRuleException("in_encounter", "Finish the fight first.");
-        var error = BodyRules.Treat(Body(), Inv, woundId, action, Now());
+        var error = BodyRules.Treat(RequireAlive(), Inv, woundId, action, Now());
         if (error != null) throw new GameRuleException("treat", error);
         await state.WriteStateAsync();
         return Health();
@@ -254,7 +266,7 @@ public sealed class PlayerGrain(
 
     public async Task<HealthMessage> TakeMedicine(string stackId)
     {
-        var error = BodyRules.TakeMedicine(Body(), Inv, stackId, Now());
+        var error = BodyRules.TakeMedicine(RequireAlive(), Inv, stackId, Now());
         if (error != null) throw new GameRuleException("medicine", error);
         await state.WriteStateAsync();
         return Health();
@@ -276,16 +288,101 @@ public sealed class PlayerGrain(
         return Health();
     }
 
+    /// <summary>
+    /// The next survivor in your line. What the dead one carried is gone (later: a corpse to loot);
+    /// the safehouse and everything in its stash are kept.
+    /// </summary>
     public async Task<HealthMessage> NewSurvivor()
     {
-        // Placeholder until we decide how harsh death is: everything you carried is gone.
         if (!Body().Dead) throw new GameRuleException("not_dead", "You're still alive.");
         state.State.Body = new BodyState { LastUpdated = Now() };
         state.State.Inventory = StarterInventory();
         state.State.ActiveEncounterId = null;
         state.State.EncounterSupplies = null;
+        state.State.SurvivorNumber++;
         await state.WriteStateAsync();
         return Health();
+    }
+
+    // ------------------------------------------------------------------ food, sleep, safehouse
+
+    public const double StashCapacityKg = 60;
+
+    public async Task<HealthMessage> EatOrDrink(string stackId)
+    {
+        NotInEncounter("No time to eat.");
+        var body = RequireAlive();
+        var error = BodyRules.EatOrDrink(body, Inv, stackId, Now());
+        if (error != null) throw new GameRuleException("eat", error);
+        await state.WriteStateAsync();
+        return Health();
+    }
+
+    public async Task<HealthMessage> Sleep()
+    {
+        NotInEncounter("Not now.");
+        if (state.State.Safehouse == null) throw new GameRuleException("no_safehouse", "You need a safehouse to sleep in.");
+        var body = Body();
+        var error = BodyRules.Sleep(body);
+        if (error != null) throw new GameRuleException("sleep", error);
+        await state.WriteStateAsync();
+        return Health();
+    }
+
+    public async Task<HealthMessage> Wake()
+    {
+        BodyRules.Wake(Body());
+        await state.WriteStateAsync();
+        return Health();
+    }
+
+    public Task<string?> SafehouseId() => Task.FromResult(state.State.Safehouse?.BuildingId);
+
+    public async Task<HealthMessage> ClaimSafehouse(string buildingId, BuildingKind kind)
+    {
+        RequireAlive();
+        var current = state.State.Safehouse;
+        if (current?.BuildingId == buildingId) throw new GameRuleException("safehouse", "This is already your safehouse.");
+        if (current != null && current.Stash.Items.Count > 0)
+            throw new GameRuleException("safehouse", "Empty your stash first: it stays in your old safehouse.");
+        state.State.Safehouse = new SafehouseView
+        {
+            BuildingId = buildingId,
+            Kind = kind,
+            Stash = new ItemContainer { Id = "stash", Name = "Stash", Capacity = StashCapacityKg },
+        };
+        await state.WriteStateAsync();
+        return Health();
+    }
+
+    public async Task<HealthMessage> StoreInSafehouse(string stackId, int count)
+    {
+        RequireAlive();
+        var stash = Stash();
+        if (!Inv.TryFind(stackId, out var from, out _)) throw Missing();
+        Check(InventoryRules.Move(from, stash, stackId, count, Inv.NewId, renameAll: false, out _));
+        await state.WriteStateAsync();
+        return Health();
+    }
+
+    public async Task<HealthMessage> RetrieveFromSafehouse(string stackId, int count, string to)
+    {
+        RequireAlive();
+        var stash = Stash();
+        var target = Inv.Container(to) ?? throw new GameRuleException("bad_target", "Put it in your pockets or a bag on your back.");
+        if (stash.Find(stackId) == null) throw new GameRuleException("no_such_item", "That isn't in your stash.");
+        // New IDs: the stash may hold items from an earlier survivor, whose IDs this inventory could reuse.
+        Check(InventoryRules.Move(stash, target, stackId, count, Inv.NewId, renameAll: true, out _));
+        await state.WriteStateAsync();
+        return Health();
+    }
+
+    private ItemContainer Stash() =>
+        state.State.Safehouse?.Stash ?? throw new GameRuleException("no_safehouse", "You don't have a safehouse.");
+
+    private void NotInEncounter(string message)
+    {
+        if (state.State.ActiveEncounterId != null) throw new GameRuleException("in_encounter", message);
     }
 
     private static GameRuleException Missing() => new("no_such_item", "You don't have that.");

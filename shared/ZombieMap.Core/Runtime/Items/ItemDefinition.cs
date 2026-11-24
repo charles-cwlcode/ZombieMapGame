@@ -31,6 +31,8 @@ namespace ZombieMap.Core.Items
         public int Hydration;
         /// <summary>Days it stays fresh after it's found. 0 = never spoils (tins, dry food).</summary>
         public int FreshDays;
+        /// <summary>Raw rice and dried pasta: not edible until cooking exists.</summary>
+        public bool NeedsCooking;
 
         // ---- medical ----
         public MedicalUse Medical;

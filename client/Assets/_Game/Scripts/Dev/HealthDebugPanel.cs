@@ -56,8 +56,9 @@ namespace ZombieMap.Client.Dev
             {
                 var r = new Rect(area.center.x - 160, area.y + 60, 320, 70);
                 GUI.Box(r, "");
-                GUI.Label(new Rect(r.x + 10, r.y + 6, 300, 24), $"<b>You died: {body.DeathCause}.</b>", Rich);
-                if (GUI.Button(new Rect(r.x + 10, r.y + 36, 300, 26), "Start a new survivor (lose everything)")) _ = _session.NewSurvivor();
+                GUI.Label(new Rect(r.x + 10, r.y + 6, 300, 24), $"<b>Survivor #{_session.SurvivorNumber} died: {body.DeathCause}.</b>", Rich);
+                string keep = _session.Safehouse != null ? "safehouse stash is kept" : "everything carried is lost";
+                if (GUI.Button(new Rect(r.x + 10, r.y + 36, 300, 26), $"Next survivor ({keep})")) _ = _session.NewSurvivor();
                 return;
             }
 
@@ -112,7 +113,9 @@ namespace ZombieMap.Client.Dev
         private void DrawStatus(Rect r, BodyView body, PlayerInventory inv)
         {
             Bar(new Rect(r.x, r.y + 4, 220, 16), body.Blood / 100f, new Color(0.75f, 0.1f, 0.1f), $"Blood {body.Blood}%");
-            Bar(new Rect(r.x, r.y + 24, 220, 16), body.Endurance / 100f, new Color(0.25f, 0.55f, 0.85f), $"Endurance {body.Endurance}%");
+            Bar(new Rect(r.x, r.y + 24, 220, 16), body.Endurance / 100f, new Color(0.25f, 0.55f, 0.85f),
+                $"Endurance {body.Endurance}%" + (body.EnduranceCap < 100 ? $" (max {body.EnduranceCap}: tired)" : ""));
+            DrawNeeds(new Rect(r.x + 570, r.y, 360, r.height), body);
 
             float x = r.x + 235;
             int bleeding = body.Wounds.Count(w => w.Bleeding);
@@ -130,6 +133,25 @@ namespace ZombieMap.Client.Dev
             if (GUI.Button(new Rect(r.xMax - 80, r.y + 4, 80, 22), "Refresh")) _ = _session.RefreshHealth();
             GUI.enabled = true;
             if (!string.IsNullOrEmpty(_session.Message)) GUI.Label(new Rect(r.xMax - 420, r.y + 26, 420, 20), _session.Message, Warn);
+        }
+
+        /// <summary>Food, water and rest bars, and sleeping (only at your safehouse).</summary>
+        private void DrawNeeds(Rect r, BodyView body)
+        {
+            Bar(new Rect(r.x, r.y + 4, 170, 16), body.Food / 100f, new Color(0.75f, 0.55f, 0.2f), body.Food <= 0 ? "Starving" : $"Food {body.Food}%");
+            Bar(new Rect(r.x, r.y + 24, 170, 16), body.Water / 100f, new Color(0.2f, 0.6f, 0.75f), body.Water <= 0 ? "Dehydrated" : $"Water {body.Water}%");
+            int rest = 100 - body.Fatigue;
+            Bar(new Rect(r.x + 180, r.y + 4, 170, 16), rest / 100f, new Color(0.5f, 0.45f, 0.8f), body.Asleep ? $"Asleep, rest {rest}%" : $"Rest {rest}%");
+
+            GUI.enabled = !_session.Busy;
+            var button = new Rect(r.x + 180, r.y + 24, 170, 18);
+            if (body.Asleep)
+            {
+                if (GUI.Button(button, "Wake up")) _ = _session.Wake();
+            }
+            else if (_session.Safehouse == null) GUI.Label(button, "No safehouse to sleep in.", Small);
+            else if (GUI.Button(button, "Sleep (at your safehouse)")) _ = _session.Sleep();
+            GUI.enabled = true;
         }
 
         /// <summary>One line in a callout box: text, an optional healing bar, optional buttons.</summary>

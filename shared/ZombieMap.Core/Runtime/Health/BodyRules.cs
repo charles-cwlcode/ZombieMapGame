@@ -20,6 +20,15 @@ namespace ZombieMap.Core.Health
         /// <summary>Antibiotics protect from (and clear) wound infection until then.</summary>
         public long AntibioticsUntil;
 
+        /// <summary>0..100, 100 = well fed. Empty: you starve (slowly lose blood).</summary>
+        public double Food = 100;
+        /// <summary>0..100, 100 = not thirsty. Empty: you dehydrate (lose blood much faster).</summary>
+        public double Water = 100;
+        /// <summary>0..100, 0 = rested. Climbs while awake; sleeping at your safehouse brings it down.</summary>
+        public double Fatigue;
+        /// <summary>Sleeping at the safehouse. Any action wakes you.</summary>
+        public bool Asleep;
+
         public bool Dead;
         public string DeathCause;
 
@@ -31,14 +40,15 @@ namespace ZombieMap.Core.Health
     public enum TreatAction { BandageWithRag, BandageWithBandage, Disinfect, Stitch, RemoveBandage }
 
     /// <summary>
-    /// How a body changes over real time, and what treating it does. Harm (bleeding, infection) only
-    /// counts time you're playing: gaps longer than <see cref="OnlineGapSeconds"/> between updates
-    /// count as offline, where you're sheltered. Healing and recovery count all time.
+    /// How a body changes over real time, and what treating it does. Everything runs in real time,
+    /// online or not: an unbandaged wound bleeds while you're logged off, a dirty bandage keeps
+    /// festering, and hunger and thirst keep building. Healing and recovery count all time too.
     /// All numbers are tuning, kept here.
     /// </summary>
     public static class BodyRules
     {
-        public const long OnlineGapSeconds = 120;
+        /// <summary>Long gaps are worked through in steps this long, so things change in the right order.</summary>
+        public const long StepSeconds = 60;
 
         public const double BleedSecondsPerBlood = 20;      // one bleeding wound: ~33 min from full to dead
         public const double InfectionSecondsPerBlood = 300; // an infected wound drains slowly
@@ -52,6 +62,25 @@ namespace ZombieMap.Core.Health
         /// <summary>Playing time an undisinfected wound (or one under a dirty bandage) takes to get infected.</summary>
         public const double InfectAfterSeconds = 45 * 60;
         public const long AntibioticsSeconds = 12 * 3600;
+
+        // ---- hunger, thirst, sleep ----
+        public const double WaterSecondsPerPoint = 24 * 3600 / 100.0;  // full to empty in a day
+        public const double FoodSecondsPerPoint = 72 * 3600 / 100.0;   // full to empty in 3 days
+        public const double MillilitresPerWaterPoint = 20;             // 2 litres a day
+        public const double CaloriesPerFoodPoint = 60;                 // 2000 kcal a day
+        public const double DehydrationSecondsPerBlood = 48 * 3600 / 100.0; // empty: dead ~2 days later
+        public const double StarvationSecondsPerBlood = 10 * 24 * 3600 / 100.0; // empty: dead ~10 days later
+        public const double AwakeSecondsPerFatigue = 16 * 3600 / 100.0;  // fully tired after 16 h awake
+        public const double SleepSecondsPerFatigue = 8 * 3600 / 100.0;   // fully rested after 8 h asleep
+        /// <summary>Asleep: food and water go down at this rate, wounds heal and endurance comes back faster.</summary>
+        public const double SleepNeedsRate = 0.5, SleepHealRate = 1.5, SleepEnduranceRate = 3;
+        /// <summary>Tired enough to sleep.</summary>
+        public const double SleepMinFatigue = 25;
+        /// <summary>Below this, food or water slows endurance recovery.</summary>
+        public const double LowNeeds = 15;
+
+        /// <summary>The most endurance you can have at this fatigue (exhaustion caps it).</summary>
+        public static int EnduranceCap(double fatigue) => fatigue >= 90 ? 50 : fatigue >= 75 ? 75 : 100;
 
         public static double HealSeconds(Wound w)
         {
@@ -75,29 +104,39 @@ namespace ZombieMap.Core.Health
                 if (b.LastUpdated == 0) b.LastUpdated = now;
                 return;
             }
-            long elapsed = now - b.LastUpdated;
-            double online = Math.Min(elapsed, OnlineGapSeconds);
-            double all = elapsed;
+            // Months away are worked through in bigger steps; nothing that slow needs the detail.
+            long step = now - b.LastUpdated > 30L * 24 * 3600 ? 600 : StepSeconds;
+            while (b.LastUpdated < now && !b.Dead)
+            {
+                long to = Math.Min(now, b.LastUpdated + step);
+                Step(b, to, to - b.LastUpdated);
+                b.LastUpdated = to;
+            }
             b.LastUpdated = now;
-            if (b.Dead) return;
+        }
 
+        private static void Step(BodyState b, long now, double dt)
+        {
             bool antibiotics = now < b.AntibioticsUntil;
+            bool thirsty = b.Water <= 0, starving = b.Food <= 0;
+            double healRate = (b.Asleep ? SleepHealRate : 1) * (thirsty || starving ? 0.25 : 1);
+
             int bleeding = 0, infected = 0;
             for (int i = b.Wounds.Count - 1; i >= 0; i--)
             {
                 var w = b.Wounds[i];
-                if (w.Bleeding && w.Kind == WoundKind.Scratch && now - w.CreatedAt >= ScratchClotSeconds) w.Bleeding = false;
+                if (w.Bleeding && w.Kind == WoundKind.Scratch && now - dt - w.CreatedAt >= ScratchClotSeconds) w.Bleeding = false;
 
                 if (antibiotics) w.Infected = false;
                 bool dirty = !w.Disinfected || BandageDirty(w, now);
                 if (!w.Infected && dirty && !antibiotics)
                 {
-                    w.DirtySeconds += online;
+                    w.DirtySeconds += dt;
                     if (w.DirtySeconds >= InfectAfterSeconds) w.Infected = true;
                 }
 
                 if (w.Bandage != BandageKind.None && !w.Bleeding && !w.Infected)
-                    w.Healed = Math.Min(1, w.Healed + all / HealSeconds(w));
+                    w.Healed = Math.Min(1, w.Healed + dt * healRate / HealSeconds(w));
                 if (w.Healed >= 1)
                 {
                     b.Wounds.RemoveAt(i);
@@ -107,20 +146,71 @@ namespace ZombieMap.Core.Health
                 if (w.Infected) infected++;
             }
 
-            double loss = online * (bleeding / BleedSecondsPerBlood + infected / InfectionSecondsPerBlood);
-            b.BloodFraction += loss > 0 ? -loss : b.Blood < 100 ? all / BloodRegenSecondsPerPoint : 0;
+            // Hunger, thirst and tiredness.
+            double needs = b.Asleep ? SleepNeedsRate : 1;
+            b.Water = Math.Max(0, b.Water - dt * needs / WaterSecondsPerPoint);
+            b.Food = Math.Max(0, b.Food - dt * needs / FoodSecondsPerPoint);
+            b.Fatigue = b.Asleep
+                ? Math.Max(0, b.Fatigue - dt / SleepSecondsPerFatigue)
+                : Math.Min(100, b.Fatigue + dt / AwakeSecondsPerFatigue);
+
+            double loss = dt * (bleeding / BleedSecondsPerBlood + infected / InfectionSecondsPerBlood +
+                                (thirsty ? 1 / DehydrationSecondsPerBlood : 0) + (starving ? 1 / StarvationSecondsPerBlood : 0));
+            if (loss > 0) b.BloodFraction -= loss;
+            else if (b.Blood < 100) b.BloodFraction += dt / BloodRegenSecondsPerPoint;
             int whole = (int)Math.Truncate(b.BloodFraction);
             b.Blood = Clamp(b.Blood + whole, 0, 100);
             b.BloodFraction -= whole;
             if (b.Blood == 100 && b.BloodFraction > 0) b.BloodFraction = 0;
 
-            b.EnduranceFraction += all / EnduranceRegenSecondsPerPoint;
+            int cap = EnduranceCap(b.Fatigue);
+            double enduranceRate = (b.Asleep ? SleepEnduranceRate : 1) * (b.Water < LowNeeds || b.Food < LowNeeds ? 0.5 : 1);
+            if (b.Endurance < cap) b.EnduranceFraction += dt * enduranceRate / EnduranceRegenSecondsPerPoint;
             int e = (int)b.EnduranceFraction;
-            b.Endurance = Clamp(b.Endurance + e, 0, 100);
+            b.Endurance = Clamp(b.Endurance + e, 0, cap);
             b.EnduranceFraction -= e;
+            if (b.Endurance >= cap) b.EnduranceFraction = 0;
 
-            if (b.Blood <= 0) Die(b, bleeding > 0 ? "Bled out" : "Infection");
+            if (b.Blood <= 0)
+                Die(b, bleeding > 0 ? "Bled out" : infected > 0 ? "Infection" : thirsty ? "Dehydration" : "Starvation");
         }
+
+        // ---------- food, drink, sleep ----------
+
+        /// <summary>Eats or drinks one of a stack. Returns an error or null.</summary>
+        public static string EatOrDrink(BodyState b, PlayerInventory inv, string stackId, long now)
+        {
+            if (b.Dead) return "You're dead.";
+            if (!inv.TryFind(stackId, out var container, out var stack)) return "You don't have that.";
+            var def = stack.Def();
+            if (def.Category != ItemCategory.Food && def.Category != ItemCategory.Drink) return $"You can't eat {def.Name.ToLowerInvariant()}.";
+            if (def.NeedsCooking) return $"{def.Name} needs cooking first.";
+            if (stack.IsSpoiled(now / 86400)) return $"The {def.Name.ToLowerInvariant()} has gone off.";
+
+            double food = def.Calories / CaloriesPerFoodPoint, water = def.Hydration / MillilitresPerWaterPoint;
+            bool useful = (food > 0 && b.Food < 98) || (water > 0 && b.Water < 98);
+            if (!useful) return def.Category == ItemCategory.Drink ? "You're not thirsty." : "You're not hungry.";
+
+            b.Asleep = false;
+            b.Food = Math.Min(100, b.Food + food);
+            b.Water = Math.Min(100, b.Water + water);
+            if (stack.Count > 1) stack.Count--;
+            else container.Items.Remove(stack);
+            return null;
+        }
+
+        /// <summary>Goes to sleep (the caller checks you're at your safehouse). Returns an error or null.</summary>
+        public static string Sleep(BodyState b)
+        {
+            if (b.Dead) return "You're dead.";
+            if (b.Asleep) return "You're already asleep.";
+            if (b.Wounds.Exists(w => w.Bleeding)) return "You'd bleed out in your sleep. Bandage it first.";
+            if (b.Fatigue < SleepMinFatigue) return "You're not tired.";
+            b.Asleep = true;
+            return null;
+        }
+
+        public static void Wake(BodyState b) => b.Asleep = false;
 
         public static void Die(BodyState b, string cause)
         {
@@ -199,6 +289,11 @@ namespace ZombieMap.Core.Health
                 Dead = b.Dead,
                 DeathCause = b.DeathCause,
                 AntibioticsUntil = b.AntibioticsUntil,
+                Food = (int)Math.Ceiling(b.Food),
+                Water = (int)Math.Ceiling(b.Water),
+                Fatigue = (int)Math.Floor(b.Fatigue),
+                EnduranceCap = EnduranceCap(b.Fatigue),
+                Asleep = b.Asleep,
             };
             foreach (var w in b.Wounds) view.Wounds.Add(ToView(w, now));
             return view;
@@ -278,6 +373,14 @@ namespace ZombieMap.Core.Health
         public bool Dead;
         public string DeathCause;
         public long AntibioticsUntil;
+        /// <summary>0..100, 100 = full.</summary>
+        public int Food;
+        public int Water;
+        /// <summary>0..100, 0 = rested.</summary>
+        public int Fatigue;
+        /// <summary>Most endurance you can have while this tired.</summary>
+        public int EnduranceCap = 100;
+        public bool Asleep;
         public List<WoundView> Wounds = new List<WoundView>();
     }
 }

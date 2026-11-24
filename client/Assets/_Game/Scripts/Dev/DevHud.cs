@@ -56,7 +56,8 @@ namespace ZombieMap.Client.Dev
                 {
                     _encounter.Force(arena, zombies);
                     _tab = EncounterTab;
-                });
+                },
+                session: _loot);
             if (_mapView != null)
                 _mapView.IsOverHud = p => p.y / _scale < ToolbarHeight || _map.InfoRect.Contains(p / _scale);
             else

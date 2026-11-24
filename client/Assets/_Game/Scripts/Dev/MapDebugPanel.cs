@@ -20,6 +20,7 @@ namespace ZombieMap.Client.Dev
         private readonly MapView _map;
         private readonly Action<FloorPlan, BuildingInfo> _openPlan;
         private readonly Action<ArenaKind, int> _forceEncounter;
+        private readonly PlayerSession _session;
         private string _status = "";
         private bool _busy;
         private int _forceZombies = 4;
@@ -32,12 +33,13 @@ namespace ZombieMap.Client.Dev
         public Rect InfoRect { get; private set; }
 
         public MapDebugPanel(GameClient client, MapView map, Action<FloorPlan, BuildingInfo> openPlan,
-            Action<ArenaKind, int> forceEncounter)
+            Action<ArenaKind, int> forceEncounter, PlayerSession session)
         {
             _client = client;
             _map = map;
             _openPlan = openPlan;
             _forceEncounter = forceEncounter;
+            _session = session;
         }
 
         public void OnGUI(Rect area)
@@ -49,7 +51,7 @@ namespace ZombieMap.Client.Dev
             }
 
             var loc = _map.Location;
-            InfoRect = new Rect(area.x, area.y, 300, _map.Selected != null ? 350 : 280);
+            InfoRect = new Rect(area.x, area.y, 300, _map.Selected != null ? 384 : 280);
             GUILayout.BeginArea(InfoRect, GUI.skin.box);
 
             GUILayout.BeginHorizontal();
@@ -123,6 +125,19 @@ namespace ZombieMap.Client.Dev
             GUI.enabled = true;
             if (GUILayout.Button("Clear", GUILayout.Width(60))) _map.ClearSelection();
             GUILayout.EndHorizontal();
+
+            if (_session != null)
+            {
+                if (_session.Safehouse?.BuildingId == b.BuildingId) GUILayout.Label("<b>Your safehouse.</b> Sleep and stash here.", Rich);
+                else
+                {
+                    GUI.enabled = inRange && _client.IsConnected && !_session.Busy;
+                    if (GUILayout.Button(_session.Safehouse == null ? "Make safehouse" : "Move safehouse here (stash must be empty)"))
+                        _ = _session.ClaimSafehouse(b.BuildingId);
+                    GUI.enabled = true;
+                }
+                if (!string.IsNullOrEmpty(_session.Message)) GUILayout.Label(_session.Message, Small);
+            }
             if (!string.IsNullOrEmpty(_status)) GUILayout.Label(_status);
             GUILayout.Label("ID " + b.BuildingId, Small);
         }

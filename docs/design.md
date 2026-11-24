@@ -115,23 +115,43 @@ in, what's wrong with your body.
 ### Health and body (phase 1: first cut done)
 - **One body per survivor, kept on the server** (`BodyState`, rules in `BodyRules`). Wounds from an
   encounter come home with you: blood, endurance and every wound carry over between fights.
-- **Real time, but only while you play:** harm (bleeding, bandages getting dirty, infection) only
-  counts online time. A gap of more than 2 minutes between updates counts as offline. Healing
-  counts all time, so logging off never kills you but does let you recover.
+- **Everything runs in real time, online or not:** an unbandaged wound bleeds while you're logged
+  off, a dirty bandage keeps festering, hunger and thirst keep building. Patch yourself up before
+  you put the phone down. Long gaps are worked through minute by minute, so things happen in order
+  (a scratch clots after 3 minutes, then blood comes back).
 - **Wounds:** scratches stop bleeding by themselves after 3 minutes; lacerations and bites bleed
   until bandaged (1 blood every 20 s). Healing takes 2 h (scratch), 12 h (laceration, 6 h if
   stitched) or 24 h (bite). Blood comes back at 1 point per 3 minutes, endurance 1 point per 6 s.
 - **Treatment out of combat** with your own supplies: rag or bandage (a rag gets dirty after 2 h,
   a bandage after 8 h), disinfect, stitch (needle and thread), remove a bandage. Dirty bandages and
-  undisinfected wounds turn infected after 45 minutes online. Antibiotics cure wound infection for
+  undisinfected wounds turn infected after 45 minutes. Antibiotics cure wound infection for
   12 h of cover; nothing cures the zombie virus.
 - **Encounters use the real body and bag:** a fight starts with your current blood, endurance and
   wounds, heals use the rags and bandages you actually carry, and what you used is taken away.
 - **Clothing** has a slot, the zones it covers, scratch and bite defence, a layer and a condition.
   Attacks check the outer layer first (a jacket before a T-shirt); defence is scaled by condition.
   A block wears the clothing by 8%, a hit by 4%. New survivors wear a T-shirt and jeans.
-- **Death:** bleeding out kills you. A dead survivor can't search or fight; **New survivor** starts
-  over with the starter kit. (How harsh death is long term is still open.)
+- **Death: a survivor line.** Bleeding out, infection, dehydration or starvation kills you. A dead
+  survivor can't search or fight. The next survivor starts with the starter kit; what the dead one
+  carried is gone (later: a corpse you can find and loot). The safehouse and its stash belong to the
+  line and are kept. Later, unlocked know-how (skills, recipes) carries over too.
+
+### Hunger, thirst, sleep, safehouse (phase 1: first cut done)
+- **Food and water** run from 100 (full) to 0 in real time: water empties in a day, food in three.
+  At 0 you lose blood: dehydration kills about 2 days later, starvation about 10 days later. Below
+  15, endurance comes back at half speed; at 0, wounds heal at a quarter speed and blood doesn't
+  come back.
+- **Eating and drinking** use what you carry: 60 kcal = 1 food point (2000 kcal a day), 20 ml = 1
+  water point (2 litres a day). Food that has gone off is refused for now (food poisoning comes with
+  spoilage in phase 2); raw rice and dried pasta need cooking, which doesn't exist yet.
+- **Fatigue** climbs to 100 over 16 hours awake. At 75 endurance is capped at 75, at 90 at 50.
+- **Safehouse:** claim any real building you're at as your safehouse (one at a time; to move, empty
+  the stash first). It has a 60 kg stash you can only use while you're there.
+- **Sleep** only at your safehouse, when tired (fatigue 25+) and not bleeding. Asleep, fatigue drains
+  over 8 hours, food and water go down at half speed, wounds heal 1.5× and endurance 3× faster.
+  Doing anything wakes you.
+- **Still to come:** cooking, sleeping rough (risky) away from the safehouse, the safehouse on the
+  map, barricades, and zombies that find it.
 - **Health screen:** a CC character split into the 17 zones by its skeleton (each vertex goes to the
   bone that moves it most). The body is a plain grey mannequin; each zone has a flat 2D shape over
   it, green (fine), amber (treated), red (needs attention, pulses while bleeding) or black (bitten).
@@ -182,15 +202,15 @@ client/  Unity 6000.5 (URP) ──WebSocket JSON──▶ server/ZombieMap.Serve
    ⬜ Mapbox v3 on a phone (real GPS). ⬜ CC5 character performance on a mid-range phone.
 1. **Vertical slice.** ✅ Walk the map, loot a house room by room, weight-based inventory.
    ✅ Wounds and clothing check, healing with your own supplies, dying.
-   ⬜ Eating and drinking, sleeping at a safehouse.
+   ✅ Eating and drinking, sleeping at a safehouse, a survivor line on death.
 2. Zombies and hordes on the map, noise, infection, spoilage, crafting, real weather,
    the AI item pipeline.
 3. Special buildings, events, factions, remote raids.
 4. Full bases, survivors, offline horde defence.
 
 ## Open questions
-- How harsh is death? (Permadeath vs a survivor line that keeps some progress.)
-- Zombie virus timer: real time or play time?
+- What carries over to the next survivor besides the stash (skills? map knowledge?).
+- Zombie virus timer: how long from bite to turning (real time, like everything else)?
 - Encounter end: a fixed zombie budget, or keep going until you flee or clear it? (Gunshots add zombies.)
 - Multiplayer: solo in a shared world, co-op raids, PvP?
 - Platforms and minimum device.

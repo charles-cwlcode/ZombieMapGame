@@ -99,11 +99,37 @@ namespace ZombieMap.Client.Dev
         public Task NewSurvivor() =>
             Run(async () => ApplyHealth(await _client.Connection.RequestAsync<HealthMessage>(MessageTypes.NewSurvivor, new { })));
 
+        // ---------- food, sleep, safehouse ----------
+
+        /// <summary>Null until you claim one.</summary>
+        public SafehouseView Safehouse { get; private set; }
+        public int SurvivorNumber { get; private set; } = 1;
+
+        public Task EatOrDrink(string stackId) => Health(MessageTypes.HealthEat, new StackRequest { StackId = stackId });
+
+        public Task Sleep() => Health(MessageTypes.Sleep, new PositionRequest { PlayerPosition = _position() });
+
+        public Task Wake() => Health(MessageTypes.Wake, new { });
+
+        public Task ClaimSafehouse(string buildingId) =>
+            Health(MessageTypes.SafehouseClaim, new SafehouseClaimRequest { BuildingId = buildingId, PlayerPosition = _position() });
+
+        public Task Store(string stackId, int count = 0) =>
+            Health(MessageTypes.SafehouseStore, new SafehouseItemRequest { StackId = stackId, Count = count, PlayerPosition = _position() });
+
+        public Task Retrieve(string stackId, int count = 0, string to = PlayerInventory.MainId) =>
+            Health(MessageTypes.SafehouseRetrieve, new SafehouseItemRequest { StackId = stackId, Count = count, To = to, PlayerPosition = _position() });
+
+        private Task Health(string type, object request) =>
+            Run(async () => ApplyHealth(await _client.Connection.RequestAsync<HealthMessage>(type, request)));
+
         private void ApplyHealth(HealthMessage m)
         {
             Inventory = m.Inventory;
             Body = m.Body;
             BodyTime = m.Now;
+            Safehouse = m.Safehouse;
+            SurvivorNumber = m.SurvivorNumber;
             BodyChanged?.Invoke();
         }
 

@@ -34,8 +34,8 @@ namespace ZombieMap.Core.Items
             Food("food.chocolate", "Chocolate bar", 0.1, 520, freshDays: 300);
             Food("food.biscuits", "Packet of biscuits", 0.3, 1400, freshDays: 180);
             Food("food.cereal", "Box of cereal", 0.5, 1900, freshDays: 200);
-            Food("food.pasta", "Bag of dried pasta", 0.5, 1800);
-            Food("food.rice", "Bag of rice", 1.0, 3600);
+            Food("food.pasta", "Bag of dried pasta", 0.5, 1800, needsCooking: true);
+            Food("food.rice", "Bag of rice", 1.0, 3600, needsCooking: true);
             Food("food.bread", "Loaf of bread", 0.8, 2000, freshDays: 4);
             Food("food.apple", "Apple", 0.2, 95, freshDays: 14, hydration: 80);
             Food("food.cheese", "Block of cheese", 0.4, 1600, freshDays: 10);
@@ -105,8 +105,8 @@ namespace ZombieMap.Core.Items
             ById.Add(def.Id, def);
         }
 
-        private static void Food(string id, string name, double weight, int calories, int freshDays = 0, int hydration = 0) =>
-            Add(new ItemDefinition { Id = id, Name = name, Category = ItemCategory.Food, Weight = weight, Calories = calories, FreshDays = freshDays, Hydration = hydration });
+        private static void Food(string id, string name, double weight, int calories, int freshDays = 0, int hydration = 0, bool needsCooking = false) =>
+            Add(new ItemDefinition { Id = id, Name = name, Category = ItemCategory.Food, Weight = weight, Calories = calories, FreshDays = freshDays, Hydration = hydration, NeedsCooking = needsCooking });
 
         private static void Drink(string id, string name, double weight, int hydration, int calories = 0, int freshDays = 0) =>
             Add(new ItemDefinition { Id = id, Name = name, Category = ItemCategory.Drink, Weight = weight, Hydration = hydration, Calories = calories, FreshDays = freshDays });

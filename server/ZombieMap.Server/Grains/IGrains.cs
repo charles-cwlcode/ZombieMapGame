@@ -34,6 +34,15 @@ public interface IPlayerGrain : IGrainWithStringKey
     Task<HealthMessage> Wear(string stackId);
     Task<HealthMessage> TakeOff(string stackId);
     Task<HealthMessage> NewSurvivor();
+
+    // Food, sleep and the safehouse. The gateway checks you're at the safehouse before Sleep/Store/Retrieve.
+    Task<HealthMessage> EatOrDrink(string stackId);
+    Task<HealthMessage> Sleep();
+    Task<HealthMessage> Wake();
+    Task<string?> SafehouseId();
+    Task<HealthMessage> ClaimSafehouse(string buildingId, BuildingKind kind);
+    Task<HealthMessage> StoreInSafehouse(string stackId, int count);
+    Task<HealthMessage> RetrieveFromSafehouse(string stackId, int count, string to);
 }
 
 /// <summary>One player's loot in one building, keyed "{playerId}|{buildingId}". Only that PlayerGrain calls it.</summary>

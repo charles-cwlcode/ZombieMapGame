@@ -34,8 +34,18 @@ namespace ZombieMap.Core.Protocol
         public const string HealthMedicine = "health.medicine";
         public const string ClothingWear = "clothing.wear";
         public const string ClothingTakeOff = "clothing.takeOff";
-        /// <summary>Dev: after dying, start again with a fresh body and the starter kit.</summary>
+        /// <summary>After dying: the next survivor in your line. Your safehouse and its stash are kept.</summary>
         public const string NewSurvivor = "player.newSurvivor";
+        /// <summary>Eat or drink one of a stack (StackRequest).</summary>
+        public const string HealthEat = "health.eat";
+        /// <summary>Sleep at your safehouse (PositionRequest). Any other action wakes you.</summary>
+        public const string Sleep = "body.sleep";
+        public const string Wake = "body.wake";
+        /// <summary>Make the building you're at your safehouse (SafehouseClaimRequest).</summary>
+        public const string SafehouseClaim = "safehouse.claim";
+        /// <summary>Move items between you and the safehouse stash (SafehouseItemRequest).</summary>
+        public const string SafehouseStore = "safehouse.store";
+        public const string SafehouseRetrieve = "safehouse.retrieve";
 
         // Server → client
         public const string Welcome = "welcome";
@@ -154,6 +164,28 @@ namespace ZombieMap.Core.Protocol
         public string StackId;
     }
 
+    /// <summary>Phase 1 trusts the client's position for range checks, as with looting.</summary>
+    public sealed class PositionRequest
+    {
+        public LatLng PlayerPosition;
+    }
+
+    public sealed class SafehouseClaimRequest
+    {
+        public string BuildingId;
+        public LatLng PlayerPosition;
+    }
+
+    /// <summary>Store: from your inventory into the stash. Retrieve: from the stash into "main" or "back".</summary>
+    public sealed class SafehouseItemRequest
+    {
+        public string StackId;
+        /// <summary>0 = the whole stack.</summary>
+        public int Count;
+        public string To;
+        public LatLng PlayerPosition;
+    }
+
     public sealed class InventoryDropRequest
     {
         public string StackId;
@@ -213,6 +245,18 @@ namespace ZombieMap.Core.Protocol
         public PlayerInventory Inventory;
         /// <summary>Server clock (unix seconds), for showing how dirty bandages are.</summary>
         public long Now;
+        /// <summary>Null until you claim one.</summary>
+        public SafehouseView Safehouse;
+        /// <summary>Which survivor in your line this is (1 = the first).</summary>
+        public int SurvivorNumber = 1;
+    }
+
+    /// <summary>Your safehouse: a real building, with a stash that outlives each survivor.</summary>
+    public sealed class SafehouseView
+    {
+        public string BuildingId;
+        public BuildingKind Kind;
+        public ItemContainer Stash;
     }
 
     public enum SearchStatus { Searching, Done }
@@ -244,6 +288,6 @@ namespace ZombieMap.Core.Protocol
 
     public static class ProtocolInfo
     {
-        public const int Version = 4;
+        public const int Version = 5;
     }
 }

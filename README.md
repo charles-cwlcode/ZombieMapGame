@@ -56,8 +56,14 @@ Then open `client/` in Unity, open `Assets/_Game/Scenes/Dev.unity` (or run
   **Take off** clothes.
 - **Health**: your survivor's body in 3D, each zone green, amber, red or black. Callout boxes show
   each wound with buttons to bandage, disinfect or stitch it using what you carry. Blood, endurance,
-  antibiotics and what you're wearing are along the edges. Drag or Q/E to turn; tap a zone for details.
-  **New survivor** starts over after death.
+  antibiotics and what you're wearing are along the edges, with food, water and rest, and **Sleep**
+  (only at your safehouse). Drag or Q/E to turn; tap a zone for details. After death, **Next
+  survivor** starts again and keeps the safehouse stash.
+
+Everything on the body runs in real time, even while the game is closed: bandage bleeding wounds
+before you stop. To get a safehouse, select a building on the **Map** tab and press **Make
+safehouse**; the **Inventory** tab then has **Stash** buttons and the stash itself, plus **Eat** and
+**Drink**.
 
 **Mapbox token:** set it in Unity (Mapbox → Setup). It's saved in
 `client/Assets/Resources/Mapbox/MapboxConfiguration.txt`, which is git-ignored.
@@ -93,7 +99,8 @@ Unity ↔ server round trip (no graphics needed):
 - ✅ Looting room by room, weight-based inventory with a worn bag
 - ✅ Health and body: wounds that last in real time, treatment with your own supplies, clothing that
   blocks hits and wears, encounters that use your real body and bag, death and a new survivor
-- ⬜ Eating and drinking, sleeping at a safehouse
+- ✅ Hunger, thirst and fatigue in real time; eating and drinking; a safehouse with a stash; sleeping there
+- ✅ Death is a survivor line: the next survivor keeps the safehouse stash
 
 ## Mapbox SDK v3.1 needs a patch for Unity 6000.5
 Stock v3.1 doesn't compile on Unity 6.5: `ElevatedTerrainStrategy.cs` uses `GetInstanceID()` and
