@@ -88,11 +88,13 @@ in, what's wrong with your body.
   behind you there are only sound cues.
 - Facing a zombie in reach shows hit chances per zone (head / torso / legs), like Fallout's VATS.
 - **Time moves only when you act.** Each action costs ticks; then zombies get those ticks.
-  If you hesitate past the **shot clock** (about 2 s, shorter when exhausted), a Wait is sent.
+  **Turn-based:** there's no clock. Nothing moves between actions, however long you think, so
+  every fight is a puzzle: read the lanes, preview where the zombies will be, then commit.
+  Turning is free, so you can look around before deciding.
 
 | Action | Ticks |
 |---|---|
-| Turn 45° | 0 (uses shot-clock time) |
+| Turn 45° | 0 (free: look around as much as you like) |
 | Attack, push, stomp, wait | 1 |
 | Patch heal (stop bleeding, no disinfecting) | 2 |
 | Flee (needs an open lane) | 2 |

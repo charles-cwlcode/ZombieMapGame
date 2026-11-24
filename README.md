@@ -50,7 +50,7 @@ Then open `client/` in Unity, open `Assets/_Game/Scenes/Dev.unity` (or run
   crawlers, big dark = a horde), with hexagons showing how many are in each block. Groups that see
   you come for you; get within 12 m and a fight starts. Untick **Attacks** to walk around without being noticed.
 - **Encounter**: the 8-lane tick prototype. A/D or arrow keys (or swipe) to turn. Hover an action
-  to preview where zombies will be when it finishes. The shot clock sends Wait if you hesitate.
+  to preview where zombies will be when it finishes. Turn-based: nothing moves until you act.
 - **Building**: a building's generated floor plan. Click a room, press **Search** on a container (2–5 real
   seconds, timed by the server), then **Take** items or put them **To bag**. Hand-made test buildings
   can be made with the controls at the top.

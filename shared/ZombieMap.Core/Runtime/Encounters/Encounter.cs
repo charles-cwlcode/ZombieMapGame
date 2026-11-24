@@ -12,7 +12,7 @@ namespace ZombieMap.Core.Encounters
     ///
     /// Time is in ticks and only moves when the player acts: each action costs a fixed
     /// number of ticks (attack 1, patch heal 2, full heal 4…), then the zombies get that
-    /// many ticks. The client's shot clock sends Wait when the player hesitates.
+    /// many ticks. Turn-based: nothing happens between actions, however long the player thinks.
     ///
     /// The server owns this object. The client only ever gets an EncounterView.
     /// All randomness comes from Rng, so the same seed and actions give the same result.
@@ -156,7 +156,7 @@ namespace ZombieMap.Core.Encounters
                     ResolveStomp(events);
                     break;
                 case EncounterActionKind.Wait:
-                    Emit(events, EncounterEventKind.Rested, null, "You hesitate and catch your breath.");
+                    Emit(events, EncounterEventKind.Rested, null, "You wait and catch your breath.");
                     break;
             }
 

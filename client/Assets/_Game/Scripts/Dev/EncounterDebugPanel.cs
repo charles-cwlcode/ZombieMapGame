@@ -11,8 +11,9 @@ namespace ZombieMap.Client.Dev
 {
     /// <summary>
     /// Phase 0 encounter prototype in IMGUI: 8 lanes around you, facing is always "up".
-    /// Hover an action to see ghost positions after its ticks. Shot clock sends Wait if you
-    /// hesitate. Swipe / A-D / arrow keys turn. Ugly on purpose: it's for feeling out the rules.
+    /// Turn-based: nothing moves until you act, so take as long as you like. Hover an action to see
+    /// ghost positions after its ticks. Swipe / A-D / arrow keys turn. Ugly on purpose: it's for
+    /// feeling out the rules.
     /// </summary>
     public sealed class EncounterDebugPanel
     {
@@ -24,9 +25,6 @@ namespace ZombieMap.Client.Dev
         private bool _busy;
         private ArenaKind _arena = ArenaKind.Field;
         private int _zombieCount = 4;
-        private bool _shotClock = true;
-        private float _shotClockSeconds = 2f;
-        private float _lastActionTime;
         private Vector2 _logScroll;
 
         public EncounterDebugPanel(GameClient client) => _client = client;
@@ -34,19 +32,6 @@ namespace ZombieMap.Client.Dev
         private bool InFight => _view != null && _view.Status == EncounterStatus.Ongoing;
 
         // ------------------------------------------------------------------ input
-
-        public void Tick()
-        {
-            if (!InFight || _busy) return;
-            if (_shotClock && Time.unscaledTime - _lastActionTime > ShotClockLimit())
-            {
-                Log("(you hesitate…)");
-                Send(EncounterAction.Of(EncounterActionKind.Wait));
-            }
-        }
-
-        /// <summary>Panic later; for now low endurance shortens the clock.</summary>
-        private float ShotClockLimit() => _view != null && _view.Endurance < Rules.ExhaustedBelow ? _shotClockSeconds * 0.6f : _shotClockSeconds;
 
         public void Turn(int steps)
         {
@@ -70,7 +55,6 @@ namespace ZombieMap.Client.Dev
             _arena = _view.Arena;
             _log.Clear();
             Log($"You walked into {_view.ZombiesRemaining} zombie{(_view.ZombiesRemaining == 1 ? "" : "s")} ({_arena}).");
-            _lastActionTime = Time.unscaledTime;
         }
 
         // ------------------------------------------------------------------ drawing
@@ -85,8 +69,6 @@ namespace ZombieMap.Client.Dev
             GUILayout.Label($"Zombies {_zombieCount}", GUILayout.Width(80));
             _zombieCount = Mathf.RoundToInt(GUILayout.HorizontalSlider(_zombieCount, 1, 12, GUILayout.Width(100)));
             GUILayout.Space(10);
-            _shotClock = GUILayout.Toggle(_shotClock, $"Shot clock {_shotClockSeconds:0.0}s", GUILayout.Width(120));
-            _shotClockSeconds = GUILayout.HorizontalSlider(_shotClockSeconds, 1f, 5f, GUILayout.Width(80));
             GUILayout.Space(10);
             GUI.enabled = _client.IsConnected && !_busy;
             if (GUILayout.Button(InFight ? "Restart" : "Start encounter", GUILayout.Width(120))) StartEncounter();
@@ -144,10 +126,10 @@ namespace ZombieMap.Client.Dev
             GUILayout.EndHorizontal();
 
             GUI.enabled = true;
-            if (InFight && _shotClock)
+            if (InFight)
             {
-                float left = Mathf.Max(0, ShotClockLimit() - (Time.unscaledTime - _lastActionTime));
-                GUILayout.Label($"Shot clock: {new string('#', Mathf.CeilToInt(left * 5))} {left:0.0}s");
+                GUILayout.Label("Your move. Nothing happens until you act: take your time." +
+                                (_view.Endurance < Rules.ExhaustedBelow ? "  Exhausted: every action but turning takes 1 tick longer." : ""));
             }
             else if (_view != null && !InFight)
             {
@@ -271,7 +253,6 @@ namespace ZombieMap.Client.Dev
                 _view = msg.Result.View;
                 _log.Clear();
                 Log($"Encounter {_encounterId}: {_view.ZombiesRemaining} zombies in the {_arena}.");
-                _lastActionTime = Time.unscaledTime;
             }
             catch (Exception ex)
             {
@@ -303,7 +284,6 @@ namespace ZombieMap.Client.Dev
             }
             finally
             {
-                _lastActionTime = Time.unscaledTime;
                 _busy = false;
             }
         }

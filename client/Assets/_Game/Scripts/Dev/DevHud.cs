@@ -81,7 +81,6 @@ namespace ZombieMap.Client.Dev
 
         private void Update()
         {
-            _encounter.Tick();
             _loot.Tick();
 
             if (_tab != _lastTab)
