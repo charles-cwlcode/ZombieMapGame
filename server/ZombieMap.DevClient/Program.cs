@@ -9,6 +9,7 @@ using System.Text;
 using ZombieMap.Core.Buildings;
 using ZombieMap.Core.Encounters;
 using ZombieMap.Core.Geo;
+using ZombieMap.Core.Items;
 using ZombieMap.Core.Protocol;
 
 string url = args.Length > 0 ? args[0] : "ws://localhost:5080/ws";
@@ -78,6 +79,8 @@ if (welcome.DevStart is LatLng start)
             Points = new List<Vec2> { new(0, 0), new(100, 0), new(100, 100), new(0, 100) },
         } })).DataAs<FloorPlanMessage>().Plan;
         Check(ProtocolJson.Serialize(spoofed) == ProtocolJson.Serialize(real), "client footprint can't override a real building");
+
+        await LootChecks(found.BuildingId, real, probe);
     }
 
     var unknown = await Request(MessageTypes.GetFloorPlan, new GetFloorPlanRequest { BuildingId = "no-such-building-" + Guid.NewGuid().ToString("N")[..6] }, allowError: true);
@@ -173,4 +176,75 @@ void Check(bool ok, string what)
 {
     Console.WriteLine($"{(ok ? "PASS" : "FAIL")}: {what}");
     if (!ok) failures++;
+}
+
+// Search every container in a real building, then take an item and put it back.
+async Task LootChecks(string buildingId, FloorPlan plan, LatLng here)
+{
+    var inv = (await Request(MessageTypes.InventoryGet, new { })).DataAs<InventoryMessage>().Inventory;
+    Console.WriteLine($"\nStarting inventory: {string.Join(", ", inv.Main.Items.Select(s => $"{s.Count}× {s.Def().Name}"))} ({inv.CarriedWeight:0.##} kg)");
+    Check(inv.CountOf(d => d.Medical == MedicalUse.Rag) == 2 && inv.Back == null, "new player starts with the starter kit");
+
+    var containers = plan.Rooms.SelectMany(r => r.Containers).ToList();
+    var far = await Request(MessageTypes.LootSearch, new LootSearchRequest
+    {
+        BuildingId = buildingId, ContainerId = containers[0].Id, PlayerPosition = GeoMath.Offset(here, 500, 0),
+    }, allowError: true);
+    Check(far.Type == MessageTypes.Error && far.DataAs<ErrorMessage>().Code == "too_far", "can't search a building from 500 m away");
+
+    var early = await Request(MessageTypes.LootTake, new LootTakeRequest
+    {
+        BuildingId = buildingId, ContainerId = containers[0].Id, StackId = "x", PlayerPosition = here,
+    }, allowError: true);
+    Check(early.Type == MessageTypes.Error && early.DataAs<ErrorMessage>().Code == "not_searched", "can't take from a container before searching it");
+
+    // Start every search, then finish them once the longest is done.
+    double longest = 0;
+    foreach (var c in containers)
+    {
+        var started = (await Request(MessageTypes.LootSearch, new LootSearchRequest { BuildingId = buildingId, ContainerId = c.Id, PlayerPosition = here }))
+            .DataAs<LootMessage>();
+        if (c == containers[0])
+            Check(started.Status == SearchStatus.Searching && started.SecondsLeft >= 2, $"searching takes time ({started.SecondsLeft} s for a {c.Kind})");
+        longest = Math.Max(longest, started.SecondsLeft);
+    }
+    var tooSoon = (await Request(MessageTypes.LootSearch, new LootSearchRequest { BuildingId = buildingId, ContainerId = containers[0].Id, PlayerPosition = here }))
+        .DataAs<LootMessage>();
+    Check(tooSoon.Status == SearchStatus.Searching, "asking again straight away is still searching");
+
+    await Task.Delay(TimeSpan.FromSeconds(longest + 0.2));
+    LootMessage? withItems = null;
+    int itemsFound = 0;
+    foreach (var c in containers)
+    {
+        var done = (await Request(MessageTypes.LootSearch, new LootSearchRequest { BuildingId = buildingId, ContainerId = c.Id, PlayerPosition = here }))
+            .DataAs<LootMessage>();
+        if (done.Status != SearchStatus.Done) { Check(false, $"{c.Id} finished searching"); continue; }
+        itemsFound += done.Contents.Items.Count;
+        Console.WriteLine($"  {done.Contents.Name,-16} {string.Join(", ", done.Contents.Items.Select(s => $"{s.Count}× {s.Def().Name}"))}");
+        if (withItems == null && done.Contents.Items.Count > 0) withItems = done;
+    }
+    Check(withItems != null, $"the building has loot ({itemsFound} stacks in {containers.Count} containers)");
+    if (withItems == null) return;
+
+    var again = (await Request(MessageTypes.LootSearch, new LootSearchRequest { BuildingId = buildingId, ContainerId = withItems.ContainerId, PlayerPosition = here }))
+        .DataAs<LootMessage>();
+    Check(ProtocolJson.Serialize(again.Contents) == ProtocolJson.Serialize(withItems.Contents), "searched containers stay the same");
+
+    var item = withItems.Contents.Items.OrderBy(s => InventoryRules.Weight(s)).First();
+    var took = (await Request(MessageTypes.LootTake, new LootTakeRequest
+    {
+        BuildingId = buildingId, ContainerId = withItems.ContainerId, StackId = item.Id, PlayerPosition = here,
+    })).DataAs<LootMessage>();
+    var mine = took.Inventory.Main.Items.FirstOrDefault(s => s.ItemId == item.ItemId && s.Id.StartsWith('i'));
+    Check(took.Contents.Find(item.Id) == null && mine != null, $"took the {item.Def().Name.ToLowerInvariant()} into my pockets");
+
+    if (mine != null)
+    {
+        var put = (await Request(MessageTypes.LootPut, new LootPutRequest
+        {
+            BuildingId = buildingId, ContainerId = withItems.ContainerId, StackId = mine.Id, PlayerPosition = here,
+        })).DataAs<LootMessage>();
+        Check(put.Contents.Items.Any(s => s.ItemId == item.ItemId) && put.Inventory.Main.Find(mine.Id) == null, "put it back");
+    }
 }

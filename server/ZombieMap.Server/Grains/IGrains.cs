@@ -1,5 +1,6 @@
 using ZombieMap.Core.Buildings;
 using ZombieMap.Core.Encounters;
+using ZombieMap.Core.Items;
 using ZombieMap.Core.Protocol;
 
 namespace ZombieMap.Server.Grains;
@@ -14,6 +15,25 @@ public interface IPlayerGrain : IGrainWithStringKey
     Task<WelcomeMessage> Hello(string? displayName);
     Task<EncounterStateMessage> StartEncounter(StartEncounterRequest request);
     Task<EncounterStateMessage> Act(string encounterId, EncounterAction action);
+
+    // Inventory and looting. The gateway checks loot range before calling these.
+    Task<PlayerInventory> GetInventory();
+    Task<PlayerInventory> Move(string stackId, int count, string to);
+    Task<PlayerInventory> Equip(string stackId);
+    Task<PlayerInventory> Unequip();
+    Task<PlayerInventory> Drop(string stackId, int count);
+    Task<LootMessage> Search(string buildingId, string containerId);
+    Task<LootMessage> Take(string buildingId, string containerId, string stackId, int count, string to);
+    Task<LootMessage> Put(string buildingId, string containerId, string stackId, int count);
+}
+
+/// <summary>One player's loot in one building, keyed "{playerId}|{buildingId}". Only that PlayerGrain calls it.</summary>
+public interface ILootGrain : IGrainWithStringKey
+{
+    Task<LootMessage> Search(string containerId);
+    Task<ItemContainer> Get(string containerId);
+    Task<ItemStack> Remove(string containerId, string stackId, int count);
+    Task Add(string containerId, ItemStack stack);
 }
 
 /// <summary>One per encounter. Only its owning PlayerGrain talks to it.</summary>

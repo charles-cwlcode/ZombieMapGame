@@ -46,11 +46,38 @@ in, what's wrong with your body.
   (`FloorPlanGenerator` → `BuildingGrain`). Shown as a 2D floor plan with rooms you can tap.
 - Normal buildings: **a separate loot copy for each player**. Special buildings: shared, contested state.
 
-### Looting room by room (planned, phase 1)
+### Looting room by room (phase 1: first cut done)
 - Tap a building in range → floor-plan panel → rooms → containers.
-- Searching takes real seconds (quick vs thorough). Noise builds up and pulls nearby map zombies in.
-- Rooms can hide zombies. Locked doors need tools. Breaking windows is fast, loud and can cut you.
-- Walking out of range ends the search; you keep what you already took.
+- **Done:**
+  - **Searching takes real seconds:** 2–5 s by container type (`LootRules`). The server times it:
+    the first `loot.search` starts the clock, and asking again before the time is up returns
+    "still searching".
+  - **Loot range:** every search, take and put checks that the player is within loot range of the
+    real building's wall.
+  - **Per-player copies:** loot is generated the first time each container is searched, from a seed
+    of player + building + container, so each player has their own copy (`LootGrain`). Taking and
+    putting back change that copy, and it stays as you left it.
+  - **Loot tables:** per container, overridden per room and building type. Pharmacy dispensaries are
+    full of medicine, shop shelves are groceries, wardrobes have clothes and bags (`LootTables`).
+- **Still to come:**
+  - thorough searches (slower, find more);
+  - noise that pulls zombies in;
+  - zombies hiding in rooms;
+  - locked doors and windows;
+  - loot respawning after a while;
+  - shared loot in special buildings.
+
+### Inventory (phase 1: first cut done)
+- **Pockets and hands hold 8 kg.** One bag can be worn on the back. A worn bag's contents count at
+  (1 − reduction): a hiking bag's are 60% lighter. A bag carried in the hands counts in full.
+- **Heavy load:** carrying over 15 kg counts as a heavy load (penalties come with endurance).
+- **Containers:** furniture has a capacity too, so you can put things back.
+- **Item state:** count (stacks of small items), condition (weapons and clothing), uses left
+  (disinfectant, painkillers, lighter), and a fresh-until day (food). Dropped items are destroyed
+  for now; later they land on the ground.
+- **New players start with:** 2 rags, a bandage, a bottle of water and a chocolate bar.
+- **Item list:** about 60 items, kept in code (`ItemCatalog`). Their IDs are saved in
+  inventories, so never rename one.
 
 ### Encounters: 8 lanes and ticks (phase 0 prototype done)
 - You're in the middle. Zombies come in on 8 lanes, across rings 3 (far) → 2 → 1 (melee) → 0 (on you).
@@ -82,9 +109,8 @@ in, what's wrong with your body.
 - Hold an action to preview where zombies will be when it finishes (`EncounterPreview`).
 - All tuning numbers live in `shared/ZombieMap.Core/Runtime/Encounters/Rules.cs`.
 
-### Inventory and health (planned, phase 1)
-- Weight-based containers (Zomboid-style), bags inside bags, weight reduction, heavy-load penalties.
-- Equipment: both hands, back, belt and holster attachments, layered clothing.
+### Equipment and health (planned, phase 1)
+- Equipment: both hands, back (done), belt and holster attachments, layered clothing.
 - Items have state: condition, freshness, partial uses, wet or dry.
 - 17 body zones. Clothing has per-zone coverage, bite and scratch protection, insulation and
   condition. Attacks check layers from the outside in; layers can tear.
@@ -131,8 +157,8 @@ client/  Unity 6000.5 (URP) ──WebSocket JSON──▶ server/ZombieMap.Serve
    prototypes, Unity ↔ server round trip. ✅ Real building data (Overture → PostGIS, stable IDs,
    building types). ✅ Mapbox v3 map in Unity with keyboard GPS simulation and tap-a-building.
    ⬜ Mapbox v3 on a phone (real GPS). ⬜ CC5 character performance on a mid-range phone.
-1. **Vertical slice.** Walk the map, loot a house room by room, weight-based inventory,
-   wounds + clothing check, healing, eat, sleep at safehouse, die.
+1. **Vertical slice.** ✅ Walk the map, loot a house room by room, weight-based inventory.
+   ⬜ Wounds and clothing check, healing with your own supplies, eating, sleeping at a safehouse, dying.
 2. Zombies and hordes on the map, noise, infection, spoilage, crafting, real weather,
    the AI item pipeline.
 3. Special buildings, events, factions, remote raids.

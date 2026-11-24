@@ -65,6 +65,20 @@ public sealed class WorldStore(NpgsqlDataSource db, IOptions<WorldOptions> optio
         };
     }
 
+    /// <summary>Metres from a point to the building's nearest wall (0 if inside), or null if we don't know the building.</summary>
+    public async Task<double?> DistanceToBuildingAsync(string buildingId, LatLng from, CancellationToken ct = default)
+    {
+        await EnsureReadyAsync(ct);
+        await using var cmd = db.CreateCommand(
+            "SELECT ST_Distance(geom::geography, ST_SetSRID(ST_MakePoint(@lng, @lat), 4326)::geography) FROM buildings WHERE id = @id");
+        cmd.Parameters.AddWithValue("id", buildingId);
+        cmd.Parameters.AddWithValue("lat", from.Lat);
+        cmd.Parameters.AddWithValue("lng", from.Lng);
+        return await cmd.ExecuteScalarAsync(ct) is double d ? d : null;
+    }
+
+    public double LootRangeMetres => _options.LootRangeMetres;
+
     /// <summary>A building's footprint in local metres, ready for the floor-plan generator. Null if unknown.</summary>
     public async Task<BuildingFootprint?> GetFootprintAsync(string buildingId, CancellationToken ct = default)
     {

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using ZombieMap.Core.Buildings;
 using ZombieMap.Core.Geo;
+using ZombieMap.Core.Items;
 using ZombieMap.Core.Protocol;
 using ZombieMap.Server.Grains;
 using ZombieMap.Server.World;
@@ -159,6 +160,66 @@ public sealed partial class GameSocketHandler(
                 return (ProtocolJson.Write(MessageTypes.EncounterState, state, env.Id), playerId);
             }
 
+            // ---------- inventory ----------
+
+            case MessageTypes.InventoryGet:
+                return (Inventory(env.Id, await grains.GetGrain<IPlayerGrain>(playerId).GetInventory()), playerId);
+
+            case MessageTypes.InventoryMove:
+            {
+                var r = env.DataAs<InventoryMoveRequest>();
+                if (r == null || !ValidId(r.StackId) || !ValidId(r.To)) return (Error(env.Id, "bad_request", "Missing item or target."), playerId);
+                return (Inventory(env.Id, await grains.GetGrain<IPlayerGrain>(playerId).Move(r.StackId, r.Count, r.To)), playerId);
+            }
+
+            case MessageTypes.InventoryEquip:
+            {
+                var r = env.DataAs<InventoryEquipRequest>();
+                if (r == null || !ValidId(r.StackId)) return (Error(env.Id, "bad_request", "Missing item."), playerId);
+                return (Inventory(env.Id, await grains.GetGrain<IPlayerGrain>(playerId).Equip(r.StackId)), playerId);
+            }
+
+            case MessageTypes.InventoryUnequip:
+                return (Inventory(env.Id, await grains.GetGrain<IPlayerGrain>(playerId).Unequip()), playerId);
+
+            case MessageTypes.InventoryDrop:
+            {
+                var r = env.DataAs<InventoryDropRequest>();
+                if (r == null || !ValidId(r.StackId)) return (Error(env.Id, "bad_request", "Missing item."), playerId);
+                return (Inventory(env.Id, await grains.GetGrain<IPlayerGrain>(playerId).Drop(r.StackId, r.Count)), playerId);
+            }
+
+            // ---------- looting (loot range is checked here, on the server) ----------
+
+            case MessageTypes.LootSearch:
+            {
+                var r = env.DataAs<LootSearchRequest>();
+                if (r == null || !ValidBuildingId(r.BuildingId) || !ValidId(r.ContainerId)) return (Error(env.Id, "bad_request", "Missing building or container."), playerId);
+                await RequireInLootRange(r.BuildingId, r.PlayerPosition);
+                var reply = await grains.GetGrain<IPlayerGrain>(playerId).Search(r.BuildingId, r.ContainerId);
+                return (ProtocolJson.Write(MessageTypes.Loot, reply, env.Id), playerId);
+            }
+
+            case MessageTypes.LootTake:
+            {
+                var r = env.DataAs<LootTakeRequest>();
+                if (r == null || !ValidBuildingId(r.BuildingId) || !ValidId(r.ContainerId) || !ValidId(r.StackId) || !ValidId(r.To))
+                    return (Error(env.Id, "bad_request", "Missing building, container, item or target."), playerId);
+                await RequireInLootRange(r.BuildingId, r.PlayerPosition);
+                var reply = await grains.GetGrain<IPlayerGrain>(playerId).Take(r.BuildingId, r.ContainerId, r.StackId, r.Count, r.To);
+                return (ProtocolJson.Write(MessageTypes.Loot, reply, env.Id), playerId);
+            }
+
+            case MessageTypes.LootPut:
+            {
+                var r = env.DataAs<LootPutRequest>();
+                if (r == null || !ValidBuildingId(r.BuildingId) || !ValidId(r.ContainerId) || !ValidId(r.StackId))
+                    return (Error(env.Id, "bad_request", "Missing building, container or item."), playerId);
+                await RequireInLootRange(r.BuildingId, r.PlayerPosition);
+                var reply = await grains.GetGrain<IPlayerGrain>(playerId).Put(r.BuildingId, r.ContainerId, r.StackId, r.Count);
+                return (ProtocolJson.Write(MessageTypes.Loot, reply, env.Id), playerId);
+            }
+
             default:
                 return (Error(env.Id, "unknown_type", $"Unknown message type '{env.Type}'."), playerId);
         }
@@ -177,6 +238,41 @@ public sealed partial class GameSocketHandler(
         if (w < 2 || h < 2) return "Footprint is too small.";
         return null;
     }
+
+    /// <summary>
+    /// Throws a game error unless the player is within loot range of a real building. Hand-made dev
+    /// buildings (IDs the map data doesn't know) skip the check, on dev servers only.
+    /// </summary>
+    private async Task RequireInLootRange(string buildingId, LatLng position)
+    {
+        bool dev = hostEnvironment.IsDevelopment();
+        double? distance;
+        try
+        {
+            if (!position.IsValid) throw new GameRuleException("bad_position", "Send your position.");
+            distance = await world.DistanceToBuildingAsync(buildingId, position);
+        }
+        catch (GameRuleException ex) when (dev && ex.Code is "world_offline" or "world_loading" or "bad_position")
+        {
+            return; // dev building while map data is down
+        }
+
+        if (distance == null)
+        {
+            if (dev) return;
+            throw new GameRuleException("unknown_building", "There's no building with that ID.");
+        }
+        if (distance > world.LootRangeMetres)
+            throw new GameRuleException("too_far", $"You're {distance:0} m away. Get within {world.LootRangeMetres:0} m.");
+    }
+
+    private static bool ValidId(string? id) => !string.IsNullOrWhiteSpace(id) && id.Length <= 64;
+
+    /// <summary>'|' separates player and building in loot grain keys.</summary>
+    private static bool ValidBuildingId(string? id) => !string.IsNullOrWhiteSpace(id) && id.Length <= 128 && !id.Contains('|');
+
+    private static string Inventory(int id, PlayerInventory inventory) =>
+        ProtocolJson.Write(MessageTypes.Inventory, new InventoryMessage { Inventory = inventory }, id);
 
     /// <summary>Centre of the first configured map area, so GPS simulation starts somewhere with buildings.</summary>
     private LatLng? DevStart()

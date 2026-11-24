@@ -1,10 +1,12 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using ZombieMap.Client.Map;
 using ZombieMap.Client.Net;
+using ZombieMap.Core.Buildings;
 using ZombieMap.Core.Geo;
 using ZombieMap.Core.Protocol;
 using Object = UnityEngine.Object;
@@ -93,12 +95,48 @@ namespace ZombieMap.Client.Editor
                 string shot = SessionState.GetString(ShotKey, "Temp/map-test.png");
                 ScreenCapture.CaptureScreenshot(shot);
                 await Task.Delay(3000); // screenshot is written at the end of a later frame
-                Finish(plan.Rooms.Count > 0, "screenshot " + shot);
+
+                bool looted = await LootChecks(plan, found, shot);
+                Finish(plan.Rooms.Count > 0 && looted, "screenshots " + shot);
             }
             catch (Exception ex)
             {
                 Finish(false, ex.ToString());
             }
+        }
+
+        /// <summary>Through the HUD: open the building, search the room with most containers, take an item.</summary>
+        private static async Task<bool> LootChecks(FloorPlan plan, BuildingInfo building, string shot)
+        {
+            var hud = Object.FindAnyObjectByType<Dev.DevHud>();
+            var room = plan.Rooms.OrderByDescending(r => r.Containers.Count).First();
+            hud.ShowBuilding(plan, building.Kind.ToString(), room);
+            foreach (var c in room.Containers) await hud.Loot.Search(c.Id);
+            Debug.Log($"[MapTest] Searching {room.Containers.Count} containers in the {room.Type}… {hud.Loot.Message}");
+
+            for (int i = 0; i < 60 && room.Containers.Any(c => hud.Loot.Container(c.Id)?.Contents == null); i++)
+                await Task.Delay(200); // DevHud.Update → LootSession.Tick finishes each search when its time is up
+            var searched = room.Containers.Select(c => hud.Loot.Container(c.Id)?.Contents).ToList();
+            if (searched.Any(c => c == null)) { Debug.LogError("[MapTest] Searches didn't finish: " + hud.Loot.Message); return false; }
+            Debug.Log("[MapTest] Found: " + string.Join("; ", searched.Select(c => $"{c.Name}: {c.Items.Count} items")));
+
+            var source = room.Containers.FirstOrDefault(c => hud.Loot.Container(c.Id).Contents.Items.Count > 0);
+            if (source == null) { Debug.Log("[MapTest] Room was empty; nothing to take (not a failure)."); return true; }
+            var item = hud.Loot.Container(source.Id).Contents.Items[0];
+            int before = hud.Loot.Inventory.Main.Items.Count;
+            await hud.Loot.Take(source.Id, item.Id);
+            bool took = hud.Loot.Inventory != null && hud.Loot.Inventory.Main.Items.Any(s => s.ItemId == item.ItemId && s.Id.StartsWith("i")) &&
+                        hud.Loot.Container(source.Id).Contents.Find(item.Id) == null;
+            Debug.Log($"[MapTest] Took {item.ItemId}: {took} (pockets {before} → {hud.Loot.Inventory?.Main.Items.Count} stacks) {hud.Loot.Message}");
+
+            await Task.Delay(500);
+            ScreenCapture.CaptureScreenshot(shot.Replace(".png", "-building.png"));
+            await Task.Delay(2000);
+            hud.ShowInventory();
+            await Task.Delay(500);
+            ScreenCapture.CaptureScreenshot(shot.Replace(".png", "-inventory.png"));
+            await Task.Delay(2000);
+            return took;
         }
 
         private static void Finish(bool ok, string detail)

@@ -21,7 +21,11 @@ builder.Services.AddHostedService<WorldStartup>();
 // Phase 0: one local silo, in-memory storage. Later: PostgreSQL storage + clustering.
 builder.UseOrleans(silo =>
 {
-    silo.UseLocalhostClustering();
+    // Ports are configurable so a second copy can run next to one in the debugger:
+    //   dotnet run --project server/ZombieMap.Server -- --urls http://localhost:5081 --Orleans:SiloPort 11112 --Orleans:GatewayPort 30001
+    silo.UseLocalhostClustering(
+        siloPort: builder.Configuration.GetValue("Orleans:SiloPort", 11111),
+        gatewayPort: builder.Configuration.GetValue("Orleans:GatewayPort", 30000));
     silo.AddMemoryGrainStorageAsDefault();
     // Shared ZombieMap.Core types have no Orleans attributes (Unity compiles them too),
     // so they cross grain calls and storage as JSON.

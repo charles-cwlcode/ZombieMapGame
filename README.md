@@ -39,7 +39,7 @@ dotnet run --project server/ZombieMap.DevClient
 ```
 
 Then open `client/` in Unity, open `Assets/_Game/Scenes/Dev.unity` (or run
-**ZombieMap → Create Dev Scene**) and press Play. The dev HUD has three tabs:
+**ZombieMap → Create Dev Scene**) and press Play. The dev HUD has four tabs:
 
 - **Map**: the Mapbox map around you. In the editor the GPS is simulated: **WASD/arrows** walk
   (relative to the camera), **Shift** runs, **Ctrl** drives, **Q/E** or drag rotates, scroll zooms.
@@ -48,7 +48,11 @@ Then open `client/` in Unity, open `Assets/_Game/Scenes/Dev.unity` (or run
   whether you're within loot range (80 m). **Search building** opens its generated floor plan.
 - **Encounter**: the 8-lane tick prototype. A/D or arrow keys (or swipe) to turn. Hover an action
   to preview where zombies will be when it finishes. The shot clock sends Wait if you hesitate.
-- **Building**: asks the server for a generated floor plan and draws it. Click rooms to see containers.
+- **Building**: a building's generated floor plan. Click a room, press **Search** on a container (2–5 real
+  seconds, timed by the server), then **Take** items or put them **To bag**. Hand-made test buildings
+  can be made with the controls at the top.
+- **Inventory**: pockets (8 kg) and the bag on your back, with weights. Move items between them, wear
+  or take off a bag, drop items, or **Put** them into the container you last searched.
 
 **Mapbox token:** set it in Unity (Mapbox → Setup). It's saved in
 `client/Assets/Resources/Mapbox/MapboxConfiguration.txt`, which is git-ignored.
@@ -72,7 +76,7 @@ Unity ↔ server round trip (no graphics needed):
 ```
 
 ## Phase 0 status
-- ✅ Repo, shared rules library (48 tests), Orleans server, WebSocket protocol
+- ✅ Repo, shared rules library (61 tests), Orleans server, WebSocket protocol
 - ✅ Encounter prototype (8 lanes, ticks, wounds, healing, preview) running on the server
 - ✅ Floor-plan generator (seeded by building ID, cached per building)
 - ✅ Real building data: Overture → PostGIS with stable GERS IDs and building types, imported by the server itself
