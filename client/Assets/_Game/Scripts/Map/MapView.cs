@@ -45,6 +45,21 @@ namespace ZombieMap.Client.Map
         public PlayerLocation Location => location;
         public Camera MapCamera => mapCamera;
 
+        /// <summary>What the camera orbits: the player marker.</summary>
+        public Vector3 FocusPoint => playerMarker != null ? playerMarker.position : Vector3.zero;
+
+        public Transform PlayerMarker => playerMarker;
+
+        /// <summary>Which way the camera faces, in degrees clockwise from north.</summary>
+        public float Yaw
+        {
+            get => _yaw;
+            set => _yaw = value;
+        }
+
+        /// <summary>Set by the overlay: gets first look at a tap (Input System screen position) and returns true to keep it from the buildings.</summary>
+        [NonSerialized] public Func<Vector2, bool> TapIntercept;
+
         /// <summary>The building the player last tapped (null if none), and what the server said.</summary>
         public BuildingInfo Selected { get; private set; }
         public string SelectionStatus { get; private set; } = "Tap a building.";
@@ -186,7 +201,7 @@ namespace ZombieMap.Client.Map
             }
             else if (pointer.press.wasReleasedThisFrame && _pressStart.HasValue)
             {
-                if (!_dragged && !_lookingUp) _ = LookUpBuildingAsync(pos);
+                if (!_dragged && !(TapIntercept?.Invoke(pos) ?? false) && !_lookingUp) _ = LookUpBuildingAsync(pos);
                 _pressStart = null;
             }
         }

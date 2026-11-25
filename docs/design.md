@@ -200,9 +200,29 @@ in, what's wrong with your body.
 - **Noise:** searching makes 1 noise, a fight starting 2. In the noisy cell and its neighbours,
   15% of idle groups per point of noise (at most 60%) within 450 m walk over, hang about 3–6
   minutes, then wander home. Hordes within 700 m head for it. Noise halves every 5 minutes.
-- **On the map:** markers sized by group (hordes dark and big), coloured by kind, pulsing when
-  they're coming for you; hexagon outlines coloured by how many zombies are in them (green ≤2,
-  amber ≤9, red more). Map tab toggles: **Attacks** and **Hexes**.
+- **On the map:** each group is a striped hazard circle on the ground in its kind's colour (shamblers
+  red, runners orange, crawlers violet; hordes big), with a pin on a stalk: a zombie-face head and a
+  count badge. A group hunting you pings fast and its pin pulses red. A fading trail shows where it
+  walked over the last 30 s (worked out from its route). Tap a pin for a card: status, distance,
+  speeds, notice range. The H3 cells aren't drawn. Map tab toggle: **Attacks**.
+- **Map overlay:** you are a cyan blip; your safehouse a green beacon and pin (where you stood when
+  you claimed it); a compass turns with the camera (tap it to face north); tapping a building gives
+  it a pin and card; starting a search or a fight sweeps an amber ring out to 450 m, how far zombies
+  hear it. In the editor with no server, made-up groups patrol around you so the map can be styled.
+- **Day and night (real time):** the sun over the player, worked out from latitude, longitude and the
+  clock (`SunMath`, shared), so everyone in a town sees the same dusk. Night: navy, glowing amber
+  roads, a few lit windows (some flicker). Day: a steel-blue blueprint, matte roads, dark outlines,
+  walls shaded by the real sun direction. Dusk (orange) and dawn (pink) warm the haze, the roofs
+  and the walls facing the low sun. Everything eases over about a second, so nothing snaps. Under
+  the compass: the time, the part of day, and the next sunrise or sunset (a countdown in the last hour
+  before sunset, red in the last ten minutes). Dev builds can hold a time from the map panel
+  (**Set time**). Zombies behave the same day and night for now.
+- **Environment:** a breeze that swings slowly through ~50° and gusts (the same for everyone, from
+  the clock); cloud shadows drifting over the map by day; dust motes in the air, warm at dusk; and
+  burning blocks: each ~330 m patch has a one-in-ten chance of a fire in each six-hour window, which
+  flares up, burns and dies down, with a dim orange pool of light, embers and smoke leaning with the
+  wind. At most four fires near you. All deterministic, no server. Kept phone-friendly: a few
+  hundred particles in all, a handful of shader instructions on surfaces that already draw.
 - **Still to come:** zombies finding your safehouse, the zombie virus turning infected survivors,
   gunshots (lots of noise), night (more and faster zombies), arenas from real land use (woods,
   car parks), and roads (zombies keep to open ground but don't follow streets).
@@ -217,6 +237,14 @@ in, what's wrong with your body.
 - 2D AI images: item icons, room illustrations, 360° arena backdrops.
 - 3D AI or CC5 models: zombies (one humanoid skeleton), avatar, special buildings.
 - Code-generated: floor plans, map building extrusions.
+- **The map look:** Pokémon Go's layout, after the end. Drawn from Mapbox vector tiles (no raster
+  pictures, no labels): ground, land use, water, roads with pavements, extruded buildings. Every
+  surface is a procedural shader (`Assets/_Game/Shaders/Map/`, no textures): dusty dead grass,
+  overgrown parks, cracked slab car parks, murky water with oil sheen, cracked roads with potholes,
+  sand drifts and weeds, buildings with empty or boarded windows, soot, rain
+  streaks and ivy. A dusty haze at the edge, and a graded, grainy post-process. `MapAtmosphere`
+  has one **decay** slider (0 = just abandoned, 1 = long gone). The colours and widths live in
+  `MapStyleBuilder` (menu **ZombieMap → Map Style**), which rebuilds the assets and wires the scene.
 - Clothing: a small set of CC5 garment shapes with AI textures (ties to protection data).
 - Pipeline: Asset Forge (OpenAI image views → Meshy → CC5).
 

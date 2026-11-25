@@ -132,6 +132,7 @@ GameObject:
   - component: {fileID: 856717458}
   - component: {fileID: 856717457}
   - component: {fileID: 856717456}
+  - component: {fileID: 856717461}
   m_Layer: 0
   m_Name: Game
   m_TagString: Untagged
@@ -221,6 +222,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &856717461
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 856717455}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26d426059065c104f9faa09c208b45c0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: ZombieMap.Client::ZombieMap.Client.Map.MapAtmosphere
+  view: {fileID: 856717457}
+  hazeColor: {r: 0.64, g: 0.62, b: 0.53, a: 1}
+  hazeStart: 1.3
+  hazeEnd: 3.6
+  hazeMax: 0.92
+  decay: 0.55
+  rereferenceMetres: 3000
 --- !u!1 &952295174
 GameObject:
   m_ObjectHideFlags: 0
@@ -232,6 +252,7 @@ GameObject:
   - component: {fileID: 952295176}
   - component: {fileID: 952295175}
   - component: {fileID: 952295177}
+  - component: {fileID: 952295178}
   m_Layer: 0
   m_Name: MapCamera
   m_TagString: MainCamera
@@ -313,6 +334,50 @@ AudioListener:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 952295174}
   m_Enabled: 1
+--- !u!114 &952295178
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 952295174}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
+  m_RenderShadows: 1
+  m_RequiresDepthTextureOption: 2
+  m_RequiresOpaqueTextureOption: 2
+  m_CameraType: 0
+  m_Cameras: []
+  m_RendererIndex: -1
+  m_VolumeLayerMask:
+    serializedVersion: 2
+    m_Bits: 1
+  m_VolumeTrigger: {fileID: 0}
+  m_VolumeFrameworkUpdateModeOption: 2
+  m_RenderPostProcessing: 1
+  m_Antialiasing: 0
+  m_AntialiasingQuality: 2
+  m_StopNaN: 0
+  m_Dithering: 0
+  m_ClearDepth: 1
+  m_AllowXRRendering: 1
+  m_AllowHDROutput: 1
+  m_UseScreenCoordOverride: 0
+  m_ScreenSizeOverride: {x: 0, y: 0, z: 0, w: 0}
+  m_ScreenCoordScaleBias: {x: 0, y: 0, z: 0, w: 0}
+  m_RequiresDepthTexture: 0
+  m_RequiresColorTexture: 0
+  m_TaaSettings:
+    m_Quality: 3
+    m_FrameInfluence: 0.1
+    m_JitterScale: 1
+    m_MipBias: 0
+    m_VarianceClampScale: 0.9
+    m_ContrastAdaptiveSharpening: 0
+  m_Version: 2
 --- !u!1 &1144590071
 GameObject:
   m_ObjectHideFlags: 0
@@ -323,6 +388,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1144590073}
   - component: {fileID: 1144590072}
+  - component: {fileID: 1144590074}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -340,8 +406,8 @@ Light:
   m_Enabled: 1
   serializedVersion: 13
   m_Type: 1
-  m_Color: {r: 1, g: 0.95686275, b: 0.8392157, a: 1}
-  m_Intensity: 1
+  m_Color: {r: 1, g: 0.92, b: 0.78, a: 1}
+  m_Intensity: 1.05
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -403,13 +469,42 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1144590071}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.44037747, y: -0.26672933, z: 0.13885048, w: 0.8459573}
+  m_LocalRotation: {x: 0.38457704, y: -0.2974213, z: 0.1324205, w: 0.86377424}
   m_LocalPosition: {x: 0, y: 3, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
+--- !u!114 &1144590074
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1144590071}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
+  m_UsePipelineSettings: 1
+  m_AdditionalLightsShadowResolutionTier: 2
+  m_CustomShadowLayers: 0
+  m_LightCookieSize: {x: 1, y: 1}
+  m_LightCookieOffset: {x: 0, y: 0}
+  m_SoftShadowQuality: 0
+  m_RenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_ShadowRenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_Version: 4
+  m_LightLayerMask: 1
+  m_ShadowLayerMask: 1
+  m_RenderingLayers: 1
+  m_ShadowRenderingLayers: 1
 --- !u!1 &1282809384
 GameObject:
   m_ObjectHideFlags: 0
@@ -568,6 +663,55 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1380471654
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1380471656}
+  - component: {fileID: 1380471655}
+  m_Layer: 0
+  m_Name: MapPostFX
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1380471655
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1380471654}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 172515602e62fb746b5d573b38a5fe58, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Core.Runtime::UnityEngine.Rendering.Volume
+  m_IsGlobal: 1
+  priority: 0
+  blendDistance: 0
+  weight: 1
+  sharedProfile: {fileID: 11400000, guid: a1be2d8b4ac9ddb4598167f5e937de3f, type: 2}
+--- !u!4 &1380471656
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1380471654}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1664605519
 GameObject:
   m_ObjectHideFlags: 0
@@ -578,7 +722,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1664605521}
   - component: {fileID: 1664605520}
-  - component: {fileID: 1664605523}
   - component: {fileID: 1664605522}
   m_Layer: 0
   m_Name: Map
@@ -611,7 +754,7 @@ MonoBehaviour:
     BaseTileRoot: {fileID: 0}
     RuntimeGenerationRoot: {fileID: 0}
   _tileCreatorBehaviour: {fileID: 0}
-  _defaultTileMaterial: {fileID: 2100000, guid: a6a681001a245ce4089aea4634eee2b8, type: 2}
+  _defaultTileMaterial: {fileID: 2100000, guid: 16423ff809491af49b47568ce1c29782, type: 2}
   TileProvider: {fileID: 1960695013}
   DataFetcher: {fileID: 0}
   CacheManager: {fileID: 0}
@@ -641,40 +784,15 @@ MonoBehaviour:
   m_GameObject: {fileID: 1664605519}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 13ef846e428d4d41b3827620e39b8a6a, type: 3}
+  m_Script: {fileID: 11500000, guid: e13965577acb456182a04c56586cb36e, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: MapboxVectorModule::Mapbox.VectorModule.Unity.VectorLayerModuleScript
-  vectorModuleSettings:
-    SourceType: 0
-    CustomSourceId: 
-    DataSettings:
-      CacheSize: 100
-      ClampDataLevelToMax: 15
-    RejectTilesOutsideZoom: {x: 12, y: 16}
+  m_EditorClassIdentifier: MapboxComponentSystem::Mapbox.VectorModule.ComponentSystem.MapboxComponentsModuleScript
   _layerVisualizers:
-  - {fileID: 11400000, guid: 86f58468535852c4fb74fc6d373a02ee, type: 2}
---- !u!114 &1664605523
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1664605519}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ac0bc0b01b604b8889bb66087e8c94d9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MapboxImageryModule::Mapbox.Example.Scripts.ModuleBehaviours.StaticApiLayerModuleScript
-  Settings:
-    SourceType: 0
-    CustomSourceId: 
-    LoadBackgroundTextures: 0
-    DataSettings:
-      UseRetinaTextures: 1
-      UseNonReadableTextures: 1
-      CacheSize: 100
-      ClampDataLevelToMax: 25
-    RejectTilesOutsideZoom: {x: 2, y: 25}
+  - {fileID: 11400000, guid: 475b8f8e1779f824387ddaa4218fd6a5, type: 2}
+  - {fileID: 11400000, guid: cc308e5a9cb35804789c47682d73a374, type: 2}
+  - {fileID: 11400000, guid: ad2ba7bd840397c41a23472a2c3f58fb, type: 2}
+  - {fileID: 11400000, guid: cc77beb0e251a3a41b63de305d69d5ab, type: 2}
+  - {fileID: 11400000, guid: 72f7acb5fa67779468f77d38440132d9, type: 2}
 --- !u!1 &1960695011
 GameObject:
   m_ObjectHideFlags: 0
@@ -794,3 +912,4 @@ SceneRoots:
   - {fileID: 1664605521}
   - {fileID: 1282809387}
   - {fileID: 856717460}
+  - {fileID: 1380471656}

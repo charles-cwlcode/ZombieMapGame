@@ -254,7 +254,7 @@ public sealed partial class GameSocketHandler(
                 if (r == null || !ValidBuildingId(r.BuildingId)) return (Error(env.Id, "bad_request", "Which building?"), playerId);
                 await RequireInLootRange(r.BuildingId, r.PlayerPosition);
                 var kind = await SafehouseKind(r.BuildingId);
-                return (ProtocolJson.Write(MessageTypes.Health, await grains.GetGrain<IPlayerGrain>(playerId).ClaimSafehouse(r.BuildingId, kind), env.Id), playerId);
+                return (ProtocolJson.Write(MessageTypes.Health, await grains.GetGrain<IPlayerGrain>(playerId).ClaimSafehouse(r.BuildingId, kind, r.PlayerPosition), env.Id), playerId);
             }
 
             case MessageTypes.SafehouseStore:

@@ -35,6 +35,9 @@ namespace ZombieMap.Client.Dev
         /// <summary>Server clock (unix seconds) when <see cref="Body"/> was sent.</summary>
         public long BodyTime { get; private set; }
         public event Action BodyChanged;
+
+        /// <summary>The player just made noise zombies can hear (a search starting); the argument is how far it carries, in metres.</summary>
+        public event Action<double> NoiseMade;
         public string BuildingId { get; private set; }
         /// <summary>The container the player last opened (for "Put" in the Inventory tab).</summary>
         public string OpenContainerId { get; private set; }
@@ -144,6 +147,7 @@ namespace ZombieMap.Client.Dev
         {
             if (BuildingId == null) return;
             if (!_containers.TryGetValue(containerId, out var state)) _containers[containerId] = state = new ContainerState();
+            bool fresh = state.Duration <= 0;
             state.Requesting = true;
             OpenContainerId = containerId;
             bool ok = await Run(async () =>
@@ -155,6 +159,7 @@ namespace ZombieMap.Client.Dev
             state.Requesting = false;
             // A failed search (e.g. walked out of range) stops, instead of retrying every frame.
             if (!ok && state.Contents == null) _containers.Remove(containerId);
+            else if (ok && fresh && state.Status == SearchStatus.Searching) NoiseMade?.Invoke(ZombieMap.Core.Zombies.ZombieRules.HearMetres);
         }
 
         public Task Take(string containerId, string stackId, int count = 0, string to = PlayerInventory.MainId) =>

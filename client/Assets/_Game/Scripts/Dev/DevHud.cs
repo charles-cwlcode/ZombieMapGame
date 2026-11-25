@@ -30,6 +30,7 @@ namespace ZombieMap.Client.Dev
         private int _lastTab = -1;
         private float _nextHealthRefresh;
         private PlayerSession _loot;
+        private MapOverlay _overlay;
         private int _tab;
         private float _scale = 1f;
         private Vector2? _touchStart;
@@ -70,6 +71,22 @@ namespace ZombieMap.Client.Dev
                     _tab = EncounterTab;
                 };
                 _map.Zombies = zombies;
+
+                // Pins, cards, compass, the player's position and the noise ring.
+                _overlay = _mapView.gameObject.AddComponent<MapOverlay>();
+                _overlay.Init(_mapView, zombies, () => _loot.Safehouse);
+                _loot.NoiseMade += metres => _overlay.Ping(metres);
+                zombies.FightStarted += _ => _overlay.Ping(ZombieMap.Core.Zombies.ZombieRules.HearMetres);
+
+                // Day and night from the real sun (dev builds can hold a time from the map panel).
+                var time = _mapView.gameObject.AddComponent<MapTimeOfDay>();
+                time.Init(_mapView, FindAnyObjectByType<MapAtmosphere>());
+                _overlay.TimeOfDay = time;
+                _map.TimeOfDay = time;
+
+                // Wind, cloud shadows, dust and burning blocks.
+                var environment = _mapView.gameObject.AddComponent<MapEnvironment>();
+                environment.Init(_mapView, FindAnyObjectByType<MapAtmosphere>(), time);
             }
             else
                 _tab = EncounterTab;
@@ -96,6 +113,7 @@ namespace ZombieMap.Client.Dev
                 _ = _loot.RefreshHealth();
                 _nextHealthRefresh = Time.unscaledTime + HealthRefreshSeconds;
             }
+            if (_overlay != null) _overlay.Visible = _tab == MapTab;
             if (_mapView != null)
             {
                 _mapView.PointerEnabled = _tab == MapTab;
@@ -124,6 +142,8 @@ namespace ZombieMap.Client.Dev
 
         private void OnGUI()
         {
+            // The map overlay (pins, cards, compass) first, so the HUD panels draw over it.
+            if (_overlay != null) _overlay.DrawGui();
             _scale = Mathf.Max(1f, Screen.height / ReferenceHeight);
             GUI.matrix = Matrix4x4.Scale(new Vector3(_scale, _scale, 1));
             float w = Screen.width / _scale, h = Screen.height / _scale;

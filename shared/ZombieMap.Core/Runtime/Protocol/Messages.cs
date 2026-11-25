@@ -284,6 +284,8 @@ namespace ZombieMap.Core.Protocol
         public string BuildingId;
         public BuildingKind Kind;
         public ItemContainer Stash;
+        /// <summary>Where it is on the map (where the player stood when they claimed it). Null for safehouses claimed before this was kept.</summary>
+        public LatLng? Position;
     }
 
     public enum SearchStatus { Searching, Done }

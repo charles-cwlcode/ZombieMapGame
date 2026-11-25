@@ -51,7 +51,7 @@ namespace ZombieMap.Client.Dev
             }
 
             var loc = _map.Location;
-            InfoRect = new Rect(area.x, area.y, 300, _map.Selected != null ? 430 : 326);
+            InfoRect = new Rect(area.x, area.y, 300, _map.Selected != null ? 454 : 350);
             GUILayout.BeginArea(InfoRect, GUI.skin.box);
 
             GUILayout.BeginHorizontal();
@@ -85,6 +85,22 @@ namespace ZombieMap.Client.Dev
             GUILayout.EndArea();
         }
 
+        /// <summary>Day and night on the map (set by the HUD).</summary>
+        public ZombieMap.Client.Map.MapTimeOfDay TimeOfDay { get; set; }
+
+        /// <summary>Dev: hold the map at a chosen time of day instead of the real clock.</summary>
+        private void DrawTime()
+        {
+            if (TimeOfDay == null || !ZombieMap.Client.Map.MapTimeOfDay.OverrideAllowed) return;
+            GUILayout.BeginHorizontal();
+            TimeOfDay.Override = GUILayout.Toggle(TimeOfDay.Override, "Set time", GUILayout.Width(75));
+            GUI.enabled = TimeOfDay.Override;
+            TimeOfDay.OverrideHour = GUILayout.HorizontalSlider(TimeOfDay.OverrideHour, 0f, 23.99f, GUILayout.Width(150));
+            GUI.enabled = true;
+            GUILayout.Label($"{TimeOfDay.LocalTime:HH:mm}", GUILayout.Width(40));
+            GUILayout.EndHorizontal();
+        }
+
         /// <summary>Zombies on the map (set by the HUD once the map exists).</summary>
         public ZombieLayer Zombies { get; set; }
 
@@ -99,7 +115,6 @@ namespace ZombieMap.Client.Dev
                 GUILayout.Label($"Nearest {near:0} m (fight at {ZombieMap.Core.Zombies.ZombieRules.EngageMetres:0} m)", GUILayout.Width(170));
             bool fights = GUILayout.Toggle(Zombies.AllowFights, "Attacks", GUILayout.Width(70));
             if (fights != Zombies.AllowFights) { Zombies.AllowFights = fights; Zombies.Refresh(); }
-            Zombies.ShowCells = GUILayout.Toggle(Zombies.ShowCells, "Hexes");
             GUILayout.EndHorizontal();
         }
 
@@ -107,6 +122,7 @@ namespace ZombieMap.Client.Dev
         private void DrawForceEncounter()
         {
             DrawZombies();
+            DrawTime();
             GUILayout.BeginHorizontal();
             GUILayout.Label("Force encounter", GUILayout.Width(105));
             GUILayout.Label($"{_forceZombies} zombies", GUILayout.Width(70));

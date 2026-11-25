@@ -8,7 +8,10 @@
         "MapboxExamples",
         "MapboxImageryModule",
         "MapboxVectorModule",
-        "UnityMapModule"
+        "MapboxComponentSystem",
+        "UnityMapModule",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
     ],
     "includePlatforms": [
         "Editor"

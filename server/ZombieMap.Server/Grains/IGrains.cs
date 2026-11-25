@@ -44,7 +44,7 @@ public interface IPlayerGrain : IGrainWithStringKey
     Task<HealthMessage> Sleep();
     Task<HealthMessage> Wake();
     Task<string?> SafehouseId();
-    Task<HealthMessage> ClaimSafehouse(string buildingId, BuildingKind kind);
+    Task<HealthMessage> ClaimSafehouse(string buildingId, BuildingKind kind, LatLng position);
     Task<HealthMessage> StoreInSafehouse(string stackId, int count);
     Task<HealthMessage> RetrieveFromSafehouse(string stackId, int count, string to);
 }

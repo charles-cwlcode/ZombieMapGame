@@ -1,0 +1,88 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bf8c281932374fb0b5c80fa7fbca2b5b, type: 3}
+  m_Name: RoadStyleSheet
+  m_EditorClassIdentifier: MapboxComponentSystem::Mapbox.VectorModule.ComponentSystem.RoadComponentVisualizer.RoadStyleSheet
+  Styles:
+  - Name: Major
+    Filters:
+      Filters:
+      - rid: 3670312235931795532
+      Type: 1
+    Width: 22
+    PushUp: 0
+    Material: {fileID: 2100000, guid: 7c41b0b249eb3d64b9a159861db18e84, type: 2}
+  - Name: Secondary
+    Filters:
+      Filters:
+      - rid: 3670312235931795533
+      Type: 1
+    Width: 14
+    PushUp: 0
+    Material: {fileID: 2100000, guid: 0cacc4b923afca544ac8579f84113521, type: 2}
+  - Name: Street
+    Filters:
+      Filters:
+      - rid: 3670312235931795534
+      Type: 1
+    Width: 7
+    PushUp: 0
+    Material: {fileID: 2100000, guid: 204a9ecf540c0eb48a848990a66c1eb9, type: 2}
+  - Name: Service
+    Filters:
+      Filters:
+      - rid: 3670312235931795535
+      Type: 1
+    Width: 4.5
+    PushUp: 0
+    Material: {fileID: 2100000, guid: f14b8da1434dfbb4d84b4478b4cd2144, type: 2}
+  - Name: Path
+    Filters:
+      Filters:
+      - rid: 3670312235931795536
+      Type: 1
+    Width: 3
+    PushUp: 0
+    Material: {fileID: 2100000, guid: ef6da20c071d7b444b8247670a3ec313, type: 2}
+  references:
+    version: 2
+    RefIds:
+    - rid: 3670312235931795532
+      type: {class: RoadClassFilter, ns: Mapbox.VectorModule.ComponentSystem.RoadComponentVisualizer, asm: MapboxComponentSystem}
+      data:
+        CheckOperation: 1
+        FilterString: motorway,trunk,primary,motorway_link,trunk_link,primary_link
+        Invert: 0
+    - rid: 3670312235931795533
+      type: {class: RoadClassFilter, ns: Mapbox.VectorModule.ComponentSystem.RoadComponentVisualizer, asm: MapboxComponentSystem}
+      data:
+        CheckOperation: 1
+        FilterString: secondary,tertiary,secondary_link,tertiary_link
+        Invert: 0
+    - rid: 3670312235931795534
+      type: {class: RoadClassFilter, ns: Mapbox.VectorModule.ComponentSystem.RoadComponentVisualizer, asm: MapboxComponentSystem}
+      data:
+        CheckOperation: 1
+        FilterString: street,street_limited
+        Invert: 0
+    - rid: 3670312235931795535
+      type: {class: RoadClassFilter, ns: Mapbox.VectorModule.ComponentSystem.RoadComponentVisualizer, asm: MapboxComponentSystem}
+      data:
+        CheckOperation: 1
+        FilterString: service,construction
+        Invert: 0
+    - rid: 3670312235931795536
+      type: {class: RoadClassFilter, ns: Mapbox.VectorModule.ComponentSystem.RoadComponentVisualizer, asm: MapboxComponentSystem}
+      data:
+        CheckOperation: 1
+        FilterString: path,track,pedestrian
+        Invert: 0

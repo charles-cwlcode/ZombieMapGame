@@ -470,7 +470,7 @@ public sealed class PlayerGrain(
 
     public Task<string?> SafehouseId() => Task.FromResult(state.State.Safehouse?.BuildingId);
 
-    public async Task<HealthMessage> ClaimSafehouse(string buildingId, BuildingKind kind)
+    public async Task<HealthMessage> ClaimSafehouse(string buildingId, BuildingKind kind, LatLng position)
     {
         RequireAlive();
         var current = state.State.Safehouse;
@@ -481,6 +481,7 @@ public sealed class PlayerGrain(
         {
             BuildingId = buildingId,
             Kind = kind,
+            Position = position,
             Stash = new ItemContainer { Id = "stash", Name = "Stash", Capacity = StashCapacityKg },
         };
         await state.WriteStateAsync();
